@@ -1,20 +1,35 @@
 {
   "schema": "duroply.manifest.v1",
   "latest": "data/snapshot.json.gz",
-  "latestArchive": "data/history/2026-09-29T04-03-49Z.json.gz",
-  "generatedAt": "2026-09-29T04:03:49.116Z",
+  "latestArchive": "data/history/2026-09-30T04-36-45Z.json.gz",
+  "generatedAt": "2026-09-30T04:36:45.263Z",
   "generatedBy": "admin",
   "rowCounts": {
-    "sales": 38991,
-    "collections": 5215,
+    "sales": 39423,
+    "collections": 5283,
     "opening_balance": 887,
     "tod_master": 26,
-    "customer_master": 1892
+    "customer_master": 1895
   },
-  "sizeBytes": 4418641,
-  "rawBytes": 86572604,
+  "sizeBytes": 4766948,
+  "rawBytes": 84221286,
   "compressed": true,
   "history": [
+    {
+      "path": "data/history/2026-09-30T04-36-45Z.json.gz",
+      "generatedAt": "2026-09-30T04:36:45.263Z",
+      "generatedBy": "admin",
+      "rowCounts": {
+        "sales": 39423,
+        "collections": 5283,
+        "opening_balance": 887,
+        "tod_master": 26,
+        "customer_master": 1895
+      },
+      "sizeBytes": 4766948,
+      "rawBytes": 84221286,
+      "compressed": true
+    },
     {
       "path": "data/history/2026-09-29T04-03-49Z.json.gz",
       "generatedAt": "2026-09-29T04:03:49.116Z",
@@ -898,21 +913,6 @@
       },
       "sizeBytes": 3404561,
       "rawBytes": 64568639,
-      "compressed": true
-    },
-    {
-      "path": "data/history/2026-08-21T04-00-49Z.json.gz",
-      "generatedAt": "2026-08-21T04:00:49.051Z",
-      "generatedBy": "admin",
-      "rowCounts": {
-        "sales": 29924,
-        "collections": 4041,
-        "opening_balance": 887,
-        "tod_master": 26,
-        "customer_master": 1848
-      },
-      "sizeBytes": 3372037,
-      "rawBytes": 63991407,
       "compressed": true
     }
   ]
