@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duroply · Finished Goods Stock Availability Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="application/json" id="dashboard-menu-manifest">
+[
+  {"menu_id": "grid",          "menu_name": "Stock Search Grid",              "parent_menu": null, "display_order": 0},
+  {"menu_id": "concentration", "menu_name": "Branch x Segment Concentration", "parent_menu": null, "display_order": 1},
+  {"menu_id": "lowstock",      "menu_name": "Low / Zero Stock",               "parent_menu": null, "display_order": 2},
+  {"menu_id": "management",    "menu_name": "Management Analytics",          "parent_menu": null, "display_order": 3},
+  {"menu_id": "overview",      "menu_name": "Overview",                       "parent_menu": null, "display_order": 4}
+]
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   RESET + ROOT TOKENS  (matches Duroply Sales / Purchase MIS Dashboard
+   design language: black header, off-white workspace, white cards,
+   accent-topped KPI tiles, dense monospace figures)
+   ════════════════════════════════════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  /* Palette matched to Duroply Purchase MIS Master Dashboard (forest green / copper / cream) */
+  --blu:#45607A;--ora:#C1793D;--grn:#4C7A4F;--red:#A23B32;--pur:#8C7A9B;--gld:#8A6A1F;--pnk:#3D7A8A;--tea:#1F5C56;
+  --bg:#EEF2EF;--s1:#ffffff;--s2:#F1F4F1;
+  --bdr:rgba(22,33,30,0.14);--bdr2:rgba(22,33,30,0.24);
+  --tx:#16211E;--dim:#5B665F;--mut:#8B948D;
+  --canvas:#EEF2EF;--surface:#FFFFFF;--masthead:#142420;--masthead-2:#1B322B;
+  --ink:#16211E;--ink-soft:#5B665F;--ink-faint:#8B948D;--copper:#C1793D;--copper-soft:#EADBC8;
+  --teal:#1F5C56;--slate:#45607A;--moss:#4C7A4F;--brick:#A23B32;--amber:#C99A34;
+  --hairline:rgba(22,33,30,0.12);--hairline-soft:rgba(22,33,30,0.07);
+}
+body{background:var(--bg);color:var(--tx);font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,Arial,sans-serif;font-size:13px;-webkit-font-smoothing:antialiased;}
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+button{font-family:inherit;}
+input,select,textarea{font-family:inherit;}
+a{color:inherit;}
+
+/* ── Header ─────────────────────────────────────────────────────── */
+.hdr{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+  background:linear-gradient(90deg,#142420,#1B322B);border-bottom:2px solid #0F1C19;
+  position:sticky;top:0;z-index:200;box-shadow:0 2px 12px rgba(0,0,0,.15);}
+.hdr-l{display:flex;align-items:center;gap:12px;}
+.logo{width:auto;height:52px;padding:5px 10px;border-radius:8px;background:#fff;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(255,255,255,.3);flex-shrink:0;}
+.logo img{height:34px;width:auto;display:block;}
+.co-name{font-size:18px;font-weight:800;letter-spacing:1.3px;color:#C1793D;font-family:'Spectral',serif;}
+.co-tag{font-size:10.5px;font-weight:600;color:rgba(243,241,234,0.6);letter-spacing:2.2px;text-transform:uppercase;margin-top:2px;}
+.hdr-c{font-size:11.5px;letter-spacing:3.5px;color:rgba(243,241,234,0.35);font-weight:600;display:none;}
+@media(min-width:1180px){.hdr-c{display:block;}}
+.hdr-r{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.period{background:rgba(193,121,61,.16);border:1px solid rgba(193,121,61,.4);border-radius:5px;
+  padding:5px 12px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:#C1793D;letter-spacing:.5px;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.user-badge{display:flex;align-items:center;gap:7px;background:rgba(243,241,234,.08);border:1px solid rgba(243,241,234,.16);
+  border-radius:6px;padding:5px 11px;}
+.user-avatar{width:20px;height:20px;border-radius:50%;background:var(--blu);color:#fff;font-size:10px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.user-info{line-height:1.25;}
+.user-name{font-size:10.5px;font-weight:700;color:#F3F1EA;}
+.user-role{font-size:8.5px;color:rgba(243,241,234,.55);text-transform:uppercase;letter-spacing:1px;}
+.icon-btn{background:rgba(243,241,234,.08);border:1px solid rgba(243,241,234,.18);color:#F3F1EA;border-radius:6px;
+  width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;transition:background .15s;}
+.icon-btn:hover{background:rgba(243,241,234,.18);}
+.icon-btn.spin{animation:spin .9s linear infinite;}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── Layout shell ───────────────────────────────────────────────── */
+.page-wrap{display:flex;align-items:flex-start;}
+.main-content{flex:1;min-width:0;padding:10px 12px 60px;}
+.side-panel{width:220px;flex-shrink:0;background:#0F1C19;border-right:1px solid rgba(243,241,234,0.10);
+  position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;box-shadow:2px 0 8px rgba(0,0,0,.04);}
+.sp-header{background:linear-gradient(135deg,#142420,#1B322B);padding:14px 16px 12px;
+  border-bottom:2px solid #1B322B;position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;}
+.sp-title{font-size:11px;font-weight:700;letter-spacing:2.5px;color:rgba(243,241,234,0.6);}
+.sp-sub{font-size:9px;color:rgba(243,241,234,0.38);font-family:'IBM Plex Mono',monospace;letter-spacing:.5px;margin-top:1px;}
+.sp-clear{font-size:9.5px;font-weight:700;color:#C1793D;background:rgba(193,121,61,.15);border:1px solid rgba(193,121,61,.4);
+  border-radius:5px;padding:4px 8px;cursor:pointer;letter-spacing:.5px;white-space:nowrap;}
+.sp-clear:hover{background:rgba(193,121,61,.28);}
+.sp-section{padding:12px 16px;}
+.sp-section:last-child{padding-bottom:24px;}
+.sp-group-lbl{font-size:8.5px;text-transform:uppercase;letter-spacing:2px;color:var(--amber);font-weight:800;margin:2px 0 8px;}
+
+/* ── GitHub Sync modal ──────────────────────────────────────────── */
+.gh-modal-overlay{position:fixed;inset:0;background:rgba(10,20,35,.55);z-index:200;
+  display:flex;align-items:center;justify-content:center;}
+.gh-modal{width:640px;max-width:94vw;max-height:88vh;overflow-y:auto;background:#fff;
+  border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.28);}
+.gh-modal-hdr{background:linear-gradient(135deg,#142420,#1B322B);color:#F3F1EA;font-size:13px;font-weight:700;
+  letter-spacing:.5px;padding:13px 16px;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between;}
+.gh-modal-close{background:none;border:none;color:#F3F1EA;font-size:14px;cursor:pointer;line-height:1;padding:2px 4px;}
+.gh-modal-close:hover{color:#fff;}
+.gh-modal-body{padding:16px;}
+.gh-modal-desc{font-size:11px;color:var(--mut);line-height:1.5;margin:0 0 14px;}
+.gh-fld{margin-bottom:10px;}
+.gh-fld-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.gh-fld label{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);
+  font-weight:700;margin-bottom:4px;}
+.gh-fld input{width:100%;box-sizing:border-box;padding:7px 9px;font-size:11.5px;border:1px solid var(--bdr2);
+  border-radius:6px;background:#fff;color:var(--tx);}
+.gh-fld input:focus{outline:none;border-color:#C1793D;}
+.gh-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 12px;}
+.gh-actions .btn{flex:1 1 auto;white-space:nowrap;}
+.gh-status{max-height:200px;overflow-y:auto;background:#142420;color:#F3F1EA;border-radius:6px;
+  padding:9px 10px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;line-height:1.6;}
+.gh-status div{margin-bottom:2px;}
+.sp-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--moss);font-weight:700;margin-bottom:5px;
+  display:flex;align-items:center;justify-content:space-between;}
+.sp-lbl .cnt{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--mut);font-weight:600;}
+.sp-fld{margin-bottom:10px;}
+.sp-input,.sp-select-native{width:100%;background:var(--s2);border:1.4px solid var(--bdr2);color:var(--tx);
+  font-size:11.5px;padding:7px 9px;border-radius:6px;outline:none;transition:border-color .15s,box-shadow .15s;}
+.sp-input:focus,.sp-select-native:focus{border-color:var(--ora);box-shadow:0 0 0 3px rgba(193,121,61,.18);}
+.msel{position:relative;}
+.msel-btn{width:100%;text-align:left;background:var(--s2);border:1.4px solid var(--bdr2);color:var(--tx);
+  font-size:11px;padding:7px 26px 7px 9px;border-radius:6px;cursor:pointer;position:relative;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.msel-btn::after{content:'▾';position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mut);font-size:9px;}
+.msel-btn.active{border-color:var(--ora);color:var(--ora);font-weight:700;background:#F7EEE2;}
+.msel-pop{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--bdr2);
+  border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.14);z-index:60;max-height:230px;overflow-y:auto;padding:6px;}
+.msel-pop.open{display:block;}
+.msel-search{width:100%;border:1px solid var(--bdr);border-radius:5px;padding:5px 7px;font-size:11px;margin-bottom:5px;outline:none;}
+.msel-actions{display:flex;gap:6px;margin-bottom:5px;}
+.msel-actions button{flex:1;font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:4px;border-radius:4px;border:1px solid var(--bdr2);
+  background:var(--s2);color:var(--dim);cursor:pointer;}
+.msel-actions button:hover{background:var(--bdr);}
+.msel-opt{display:flex;align-items:center;gap:7px;padding:4.5px 6px;border-radius:4px;cursor:pointer;font-size:11px;}
+.msel-opt:hover{background:var(--s2);}
+.msel-opt input{accent-color:var(--ora);width:13px;height:13px;flex-shrink:0;}
+.msel-opt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chip-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.chip{display:flex;align-items:center;gap:5px;background:rgba(193,121,61,.12);color:var(--copper);border:1px solid rgba(193,121,61,.35);
+  border-radius:999px;padding:3px 9px 3px 10px;font-size:10px;font-weight:600;}
+.chip b{cursor:pointer;font-size:12px;line-height:1;color:#94a3b8;}
+.chip b:hover{color:var(--red);}
+.range2{display:flex;gap:6px;}
+.range2 .sp-input{padding:6px 7px;font-size:10.5px;}
+
+/* ── KPI strip — reworked as the Purchase MIS "ledger tape": a flat
+   dark strip of cells divided by hairlines, instead of individual
+   white cards with a colored accent bar. ─────────────────────────── */
+.kpi-grid{display:flex;overflow-x:auto;scrollbar-width:thin;background:var(--masthead-2);
+  border:0.5px solid rgba(243,241,234,0.12);border-radius:var(--radius,10px);margin-bottom:14px;}
+/* The hero KPI strip sits directly under the header — bleed it edge-to-edge
+   (cancelling .main-content's padding) so it reads as one continuous dark
+   band with the header/sidebar, the way Purchase MIS's ledger tape does,
+   with no light canvas seam between them. */
+#kpiGrid{margin:-10px -12px 14px -12px;border-radius:0;border:none;border-bottom:0.5px solid rgba(243,241,234,0.12);}
+.kpi{flex:1 0 148px;min-width:148px;background:none;border:none;border-right:0.5px solid rgba(243,241,234,0.10);
+  border-radius:0;padding:14px 16px 15px;position:relative;overflow:visible;box-shadow:none;
+  transition:none;cursor:default;}
+.kpi:last-child{border-right:none;}
+.kpi:hover{transform:none;box-shadow:none;}
+.kpi::after{content:none;}
+.kpi-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:0.8px;color:rgba(243,241,234,0.5);margin-bottom:6px;font-weight:500;}
+.kpi-val{font-size:21px;font-weight:600;letter-spacing:.2px;line-height:1;color:#F7F5EF;font-variant-numeric:tabular-nums;}
+.kpi-sub{font-size:10px;color:rgba(243,241,234,0.45);margin-top:5px;font-family:'IBM Plex Mono',monospace;}
+/* Semantic accents live on the value text only (as in Purchase MIS's
+   .cell .val.pos/.neg and flag-amber), never on the tile itself. */
+.kpi.red .kpi-val{color:#E08277;}
+.kpi.gld .kpi-val{color:#E3C06B;}
+.kpi.grn .kpi-val{color:#8FCB9C;}
+
+/* ── Section headers / cards / grids ───────────────────────────── */
+.sec{font-size:10.5px;font-weight:700;letter-spacing:3px;color:var(--mut);text-transform:uppercase;
+  margin:22px 0 10px;display:flex;align-items:center;gap:8px;}
+.sec::after{content:'';flex:1;height:1px;background:var(--bdr);}
+.sec.first{margin-top:0;}
+.g2{display:grid;grid-template-columns:1.3fr 1fr;gap:12px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media(max-width:1050px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+.card{background:var(--s1);border:1px solid var(--bdr);border-radius:10px;padding:14px 10px 12px;overflow:hidden;
+  box-shadow:0 1px 4px rgba(0,0,0,.05);}
+.ct{font-size:9.5px;text-transform:uppercase;letter-spacing:1.6px;color:var(--dim);font-weight:700;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:7px;}
+.ct .tag{font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:var(--mut);font-weight:600;text-transform:none;letter-spacing:0;}
+.chart-wrap{position:relative;height:230px;}
+.chart-wrap.tall{height:320px;}
+.empty-note{font-size:11px;color:var(--mut);text-align:center;padding:30px 0;}
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+.btn{cursor:pointer;border:none;border-radius:7px;font-weight:700;letter-spacing:.3px;padding:7px 13px;
+  font-size:11px;transition:all .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;}
+.btn-primary{background:linear-gradient(135deg,#C1793D,#96581F);color:#fff;box-shadow:0 3px 10px rgba(193,121,61,.28);}
+.btn-primary:hover{filter:brightness(1.06);}
+.btn-ghost{background:var(--s2);color:var(--dim);border:1px solid var(--bdr2);}
+.btn-ghost:hover{background:var(--bdr);}
+.btn-sm{padding:5px 10px;font-size:10px;}
+
+/* ── Table / grid ───────────────────────────────────────────────── */
+.tbl-scroll{overflow:auto;max-height:380px;border-radius:8px;border:1px solid var(--bdr);}
+table{width:100%;border-collapse:collapse;font-size:11.3px;}
+thead th{position:sticky;top:0;z-index:5;background:var(--masthead);color:#F3F1EA;font-size:8.6px;text-transform:uppercase;
+  letter-spacing:1.1px;padding:8px 9px;text-align:left;font-weight:700;white-space:nowrap;cursor:pointer;user-select:none;}
+thead th:hover{background:var(--masthead-2);}
+thead th.sorted{color:var(--copper);}
+thead th .arrow{font-size:8px;margin-left:3px;opacity:.85;}
+tbody td{padding:6.5px 9px;border-bottom:1px solid var(--bdr);color:var(--tx);white-space:nowrap;}
+tbody tr:hover td{background:#E9EFE9;}
+tbody tr:nth-child(even) td{background:#fafbfc;}
+tbody tr:nth-child(even):hover td{background:#eef2f6;}
+td.nr,th.nr{text-align:right;font-family:'IBM Plex Mono',monospace;}
+td.freeze,th.freeze{position:sticky;left:0;background:#fff;z-index:3;box-shadow:2px 0 4px rgba(0,0,0,.04);}
+thead th.freeze{background:var(--masthead);z-index:6;}
+tbody tr:nth-child(even) td.freeze{background:#fafbfc;}
+tbody tr:hover td.freeze{background:#E9EFE9;}
+thead tr.filter-row th{position:sticky;z-index:5;background:#F5EAD3;padding:3px 4px;cursor:default;}
+thead tr.filter-row th.freeze{background:#F5EAD3;position:sticky;left:0;z-index:6;}
+.col-filter-input{width:100%;box-sizing:border-box;padding:4px 6px;font-size:10.5px;font-weight:400;
+  text-transform:none;letter-spacing:0;border:1px solid var(--amber);border-radius:4px;background:#ffffff;color:var(--tx);}
+.col-filter-input::placeholder{color:var(--slate);}
+.col-filter-input:focus{outline:none;border-color:var(--copper);background:#FBF4EA;}
+.badge{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.5px;padding:2px 7px;border-radius:999px;text-transform:uppercase;}
+.badge.grn{background:#E4EFE1;color:var(--moss);}
+.badge.yel{background:#F5EAD3;color:#8A6A1F;}
+.badge.red{background:#F3E1DE;color:var(--brick);}
+.badge.gry{background:#EAEDE9;color:var(--ink-faint);}
+.row-expand-btn{cursor:pointer;color:var(--blu);font-weight:800;font-size:12px;width:16px;display:inline-block;text-align:center;}
+tr.expand-row td{background:var(--canvas);padding:0;}
+.expand-inner{padding:10px 14px;font-size:10.8px;}
+.expand-inner table{font-size:10.5px;}
+.expand-inner th{position:static;background:var(--s2);color:var(--dim);}
+
+/* Inventory Value Summary drill-down (Branch → Product Category → Brand rows,
+   one dynamic Qty/NA/Amt(Lacs)/Rt-NA column group per source, + Grand Total). */
+#valueSummaryTable tr.vs-branch td:first-child{font-weight:700;}
+#valueSummaryTable tr.vs-category td:first-child{color:var(--dim);}
+#valueSummaryTable tr.vs-brand td:first-child{color:var(--mut);}
+/* Sub-header row (Qty/NA/Amt(Lacs)/Rt-NA) sticks directly under the
+   group-label row — exact pixel offset set at runtime by renderValueSummaryHead(). */
+#valueSummaryTable tr.vs-subhead th{position:sticky;z-index:5;}
+/* Column headers read a little larger here than the dense grid elsewhere. */
+#valueSummaryTable thead th{font-size:11px;letter-spacing:0.6px;}
+/* Each source's group label is centered over its own 4 value columns. */
+#valueSummaryTable th.vs-grouphdr{text-align:center;}
+/* This card's own title reads bigger than the generic .ct heading elsewhere
+   (this table has no drill-down hint banner anymore, so the title stands alone). */
+#tab-valuesummary .ct .vs-title{font-size:14px;letter-spacing:0.8px;}
+/* "All Amt in Lacs" reads larger here than the generic .ct .tag hint text
+   used elsewhere, since it's the only label for this whole report's units. */
+#tab-valuesummary .ct .tag{font-size:12px;font-weight:700;}
+/* Grand Total column group — a soft copper tint distinguishes it from the
+   per-source groups, same accent used for the app's other totals/highlights. */
+#valueSummaryTable th.vs-grouphdr.vs-gt{color:var(--copper,#C1793D);}
+#valueSummaryTable td.vs-gt{background:var(--copper-soft,#EADBC8);}
+#valueSummaryTable tr:nth-child(even) td.vs-gt{background:var(--copper-soft,#EADBC8);}
+/* Grand Total row at the bottom of the table. */
+#valueSummaryTable tr.vs-grandtotal td{font-weight:700;border-top:2px solid var(--bdr);background:var(--canvas);padding:11px 9px;}
+#valueSummaryTable tr.vs-grandtotal td.freeze{background:var(--canvas);}
+#valueSummaryTable tr.vs-grandtotal td.vs-gt{background:var(--copper-soft,#EADBC8);}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-0{background:#BFD6F3;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-1{background:#F9D2C2;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-2{background:#BBE7D7;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-3{background:#FAE3B2;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-4{background:#F8D7E4;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-5{background:#B2DAB2;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-6{background:#C9C4E5;}
+#valueSummaryTable tr.vs-grandtotal td.vs-src-7{background:#F7C8C8;}
+/* Each source column group gets its own tint (positional, not tied to any
+   specific source name) so the groups read apart at a glance — the same
+   idea as the Grand Total's copper tint, just one shade per source. Header
+   hues are a fixed-order 8-slot categorical set (blue/orange/aqua/yellow/
+   magenta/green/violet/red) stepped for contrast on the dark masthead;
+   cell tints are the same hue family blended lighter for readability behind
+   dark text, kept strong enough that neighboring sources stay clearly
+   distinguishable rather than washing into look-alike pastels.
+   nth-child(even) overrides keep the tint from being washed out by the
+   table's normal zebra striping. */
+#valueSummaryTable th.vs-grouphdr.vs-src-0{color:#3987e5;} #valueSummaryTable td.vs-src-0{background:#BFD6F3;}
+#valueSummaryTable th.vs-grouphdr.vs-src-1{color:#d95926;} #valueSummaryTable td.vs-src-1{background:#F9D2C2;}
+#valueSummaryTable th.vs-grouphdr.vs-src-2{color:#199e70;} #valueSummaryTable td.vs-src-2{background:#BBE7D7;}
+#valueSummaryTable th.vs-grouphdr.vs-src-3{color:#c98500;} #valueSummaryTable td.vs-src-3{background:#FAE3B2;}
+#valueSummaryTable th.vs-grouphdr.vs-src-4{color:#d55181;} #valueSummaryTable td.vs-src-4{background:#F8D7E4;}
+#valueSummaryTable th.vs-grouphdr.vs-src-5{color:#008300;} #valueSummaryTable td.vs-src-5{background:#B2DAB2;}
+#valueSummaryTable th.vs-grouphdr.vs-src-6{color:#9085e9;} #valueSummaryTable td.vs-src-6{background:#C9C4E5;}
+#valueSummaryTable th.vs-grouphdr.vs-src-7{color:#e66767;} #valueSummaryTable td.vs-src-7{background:#F7C8C8;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-0{background:#BFD6F3;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-1{background:#F9D2C2;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-2{background:#BBE7D7;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-3{background:#FAE3B2;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-4{background:#F8D7E4;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-5{background:#B2DAB2;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-6{background:#C9C4E5;}
+#valueSummaryTable tr:nth-child(even) td.vs-src-7{background:#F7C8C8;}
+
+/* Stock Search Grid — smaller font/padding than other tables on this page,
+   so more columns fit before Total FA without needing horizontal scroll. */
+#mainTable{font-size:10.2px;}
+#mainTable thead th{font-size:10.5px;padding:6px 5px;}
+#mainTable tbody td{padding:5px 6px;}
+#mainTable .col-filter-input{font-size:11.5px;padding:3px 4px;}
+#mainTable td.nr{font-size:12px;}
+#mainTable td.col-itemname{font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;}
+/* Qty(Pcs) is the 5th column, Sqr Mtr the 6th (Warehouse, Item Code, Item
+   Name, NTD Spec, Qty(Pcs), Sqr Mtr, Batch No.) — both are short numeric
+   values that don't need much room, so cap their width and let Item Name
+   use the reclaimed space instead. The header labels are wider than the
+   capped column, so let just the header cell wrap onto two lines instead
+   of overflowing into the next column. */
+#mainTable th:nth-child(5),#mainTable td:nth-child(5){width:52px;max-width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#mainTable th:nth-child(6),#mainTable td:nth-child(6){width:66px;max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#mainTable thead th:nth-child(5),#mainTable thead th:nth-child(6){white-space:normal;line-height:1.25;text-align:center;}
+
+/* ── Pagination / toolbar ─────────────────────────────────────── */
+.tbl-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+.tbl-toolbar-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.search-box{display:flex;align-items:center;gap:6px;background:var(--s2);border:1.4px solid var(--bdr2);border-radius:7px;
+  padding:6px 10px;min-width:230px;}
+.search-box input{border:none;background:transparent;outline:none;font-size:12px;width:100%;color:var(--tx);}
+.pager{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);margin-top:10px;flex-wrap:wrap;justify-content:space-between;}
+.pager-btns{display:flex;gap:5px;}
+.pager-btns button{width:26px;height:26px;border-radius:5px;border:1px solid var(--bdr2);background:#fff;cursor:pointer;font-size:11px;}
+.pager-btns button:disabled{opacity:.35;cursor:not-allowed;}
+.pager-btns button:hover:not(:disabled){background:var(--s2);}
+.pagesize{border:1px solid var(--bdr2);border-radius:5px;padding:4px 6px;font-size:10.5px;background:#fff;}
+
+/* ── Tabs ───────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--bdr);margin-bottom:10px;flex-wrap:wrap;}
+.tab-btn{padding:9px 14px;font-size:11.5px;font-weight:700;color:var(--mut);cursor:pointer;border-bottom:2.5px solid transparent;
+  margin-bottom:-2px;letter-spacing:.3px;}
+.tab-btn:hover{color:var(--dim);}
+.tab-btn.active{color:var(--ora);border-bottom-color:var(--ora);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── Heatmap ────────────────────────────────────────────────────── */
+.heatmap-wrap{overflow-x:auto;}
+.heatmap{border-collapse:collapse;font-size:12px;width:100%;}
+.heatmap th{background:var(--s2);color:var(--dim);font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  padding:7px 9px;text-align:center;white-space:nowrap;position:static;}
+.heatmap th:first-child{text-align:left;}
+/* "N branches × M segments" banner — bigger than the generic .tag it
+   inherits from elsewhere on the page, specific to this element only. */
+#heatmapNote{font-size:13.5px;font-weight:700;color:var(--tx);}
+.heatmap td{padding:8px 10px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11.8px;color:#3a2a18;
+  border:1px solid #fff;white-space:nowrap;}
+.heatmap td.rowlbl{text-align:left;font-family:inherit;font-weight:700;color:var(--tx);background:var(--s2)!important;}
+.heatmap-total-row td{font-weight:700;background:var(--canvas)!important;border-top:2px solid var(--bdr);color:var(--tx);}
+.heatmap-total-row td.rowlbl{background:var(--copper-soft)!important;}
+
+/* ── Loading overlay ────────────────────────────────────────────── */
+.loading-overlay{position:fixed;inset:0;background:rgba(20,36,32,.92);z-index:9999;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;color:#fff;}
+.spinner{width:42px;height:42px;border-radius:50%;border:3px solid rgba(255,255,255,.2);border-top-color:#C1793D;
+  animation:sp 0.8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+.loading-msg{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(243,241,234,.7);font-family:'IBM Plex Mono',monospace;}
+.err-banner{background:#F3E1DE;border:1px solid rgba(162,59,50,.4);color:var(--brick);border-radius:8px;padding:10px 14px;font-size:11.5px;
+  margin-bottom:14px;display:none;}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loadingMsg">CONNECTING TO SUPABASE…</div>
+</div>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="hdr">
+  <div class="hdr-l">
+    <div class="logo"><img src="data:image/png;base64,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" alt="Duroply"></div>
+    <div>
+      <div class="co-name">DUROPLY INDUSTRIES LIMITED</div>
+      <div class="co-tag">Finished Goods Stock Availability Dashboard</div>
+    </div>
+  </div>
+  <div class="hdr-c"></div>
+  <div class="hdr-r">
+    <div class="user-badge">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div class="user-info">
+        <div class="user-name" id="userName">Loading…</div>
+        <div class="user-role" id="userRole">&nbsp;</div>
+      </div>
+    </div>
+    <div class="period" id="asOnDateBanner" title="As On Date from fg_closing_stock">
+      <span id="periodLabel">STOCK AS ON —</span>
+    </div>
+    <button class="icon-btn" id="refreshBtn" title="Refresh data from Supabase">&#8635;</button>
+  </div>
+</header>
+
+<div class="page-wrap">
+
+  <!-- ═══════════════════ FILTER SIDE PANEL ═══════════════════ -->
+  <aside class="side-panel">
+    <div class="sp-header">
+      <div>
+        <div class="sp-title">FILTERS</div>
+        <div class="sp-sub" id="filterSummary">0 filters active</div>
+      </div>
+      <button class="sp-clear" id="clearFiltersBtn">CLEAR ALL</button>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Quick Search</div>
+      <div class="sp-fld">
+        <input class="sp-input" id="quickSearch" placeholder="Item name, item code or batch…">
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Location</div>
+      <div class="sp-fld" id="f_branch_name"></div>
+      <div class="sp-fld" id="f_whs_name"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Product Classification</div>
+      <div class="sp-fld" id="f_segment_name"></div>
+      <div class="sp-fld" id="f_sub_brand_name"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Specification</div>
+      <div class="sp-fld" id="f_thickness_mm"></div>
+      <div class="sp-fld" id="f_length_m"></div>
+      <div class="sp-fld" id="f_width_m"></div>
+      <div class="sp-fld" id="f_ntd_spec_name"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Identifiers</div>
+      <div class="sp-fld"><input class="sp-input" id="f_item_no_text" placeholder="Item code contains…"></div>
+      <div class="sp-fld"><input class="sp-input" id="f_item_name_text" placeholder="Item name contains…"></div>
+      <div class="sp-fld"><input class="sp-input" id="f_batch_num_text" placeholder="Batch number contains…"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Source &amp; Status</div>
+      <div class="sp-fld" id="f_source_name"></div>
+      <div class="sp-fld" id="f_group_status"></div>
+      <div class="sp-fld" id="f_group_grade"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Quantity Thresholds</div>
+      <div class="sp-fld">
+        <div class="sp-lbl">Closing Qty <span style="font-size:15px;vertical-align:-2px;display:inline-block;">&ge;</span></div>
+        <input class="sp-input" type="number" id="f_qty_min" placeholder="e.g. 0">
+      </div>
+      <div class="sp-fld">
+        <div class="sp-lbl">Total FA (SqrMtr) <span style="font-size:15px;vertical-align:-2px;display:inline-block;">&ge;</span></div>
+        <input class="sp-input" type="number" id="f_fa_min" placeholder="e.g. 0">
+      </div>
+    </div>
+
+    <div class="sp-section">
+      <div class="chip-row" id="activeChips"></div>
+    </div>
+
+    <div class="sp-section">
+      <div class="sp-group-lbl">Cloud Sync</div>
+      <button class="btn btn-ghost" id="ghSyncOpenBtn" style="width:100%;justify-content:center;">☁ GitHub Sync</button>
+      <div style="font-size:9.5px;color:var(--mut);margin-top:6px;" id="ghSyncStatusMini">Not configured</div>
+      <button class="btn btn-ghost" id="refreshFromCloudBtn" style="width:100%;justify-content:center;margin-top:8px;">🔄 Refresh from Cloud</button>
+      <div style="font-size:9.5px;color:var(--mut);margin-top:6px;" id="refreshFromCloudStatus">Pulls the latest live data from Supabase</div>
+    </div>
+
+    <div class="sp-section" style="padding-top:4px;">
+      <div style="font-size:8px;color:rgba(243,241,234,.25);text-align:center;letter-spacing:.3px;">BUILD 2026-08-01-KPI6-19</div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════ GITHUB SYNC MODAL ═══════════════════ -->
+  <div class="gh-modal-overlay" id="ghSyncModalOverlay" style="display:none;">
+    <div class="gh-modal">
+      <div class="gh-modal-hdr">
+        <div>☁ GitHub Sync</div>
+        <button class="gh-modal-close" id="ghSyncCloseBtn" title="Close">✕</button>
+      </div>
+      <div class="gh-modal-body">
+        <p class="gh-modal-desc">Publish the currently loaded stock data as a JSON snapshot to a GitHub repo, or pull the latest published snapshot down into this dashboard — lets the team view the same stock data instantly without everyone needing a live Supabase connection.</p>
+
+        <div class="gh-fld-row">
+          <div class="gh-fld"><label>Repo Owner</label><input id="ghOwner" placeholder="e.g. duroply-industries" autocomplete="off"></div>
+          <div class="gh-fld"><label>Repo Name</label><input id="ghRepo" placeholder="e.g. dashboard-data" autocomplete="off"></div>
+        </div>
+        <div class="gh-fld-row">
+          <div class="gh-fld"><label>Branch</label><input id="ghBranch" placeholder="main" value="main" autocomplete="off"></div>
+          <div class="gh-fld"><label>File Path</label><input id="ghPath" placeholder="fg_closing_stock_snapshot.json" value="fg_closing_stock_snapshot.json" autocomplete="off"></div>
+        </div>
+        <div class="gh-fld"><label>Personal Access Token</label><input id="ghToken" type="password" placeholder="ghp_… (needs repo contents write access)" autocomplete="off"></div>
+
+        <div class="gh-actions">
+          <button class="btn btn-ghost btn-sm" id="ghSaveConfigBtn">💾 Save Config</button>
+          <button class="btn btn-primary btn-sm" id="ghPushBtn">⚡ Save Snapshot to GitHub</button>
+          <button class="btn btn-ghost btn-sm" id="ghPullBtn">⬇ Load Snapshot from GitHub</button>
+        </div>
+
+        <div class="gh-status" id="ghSyncLog"><div style="color:var(--mut);">Console ready. Configure your repo above, then Save Config.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+  <main class="main-content">
+
+    <div class="err-banner" id="errBanner"></div>
+
+    <!-- KPI STRIP -->
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab-btn active" data-tab="grid">Stock Search Grid</div>
+      <div class="tab-btn" data-tab="concentration">Branch x Segment Concentration</div>
+      <div class="tab-btn" data-tab="valuesummary">Inventory Value Summary</div>
+      <div class="tab-btn" data-tab="management">Management Analytics</div>
+      <div class="tab-btn" data-tab="overview">Overview</div>
+      <div class="tab-btn" data-tab="lowstock">Low / Zero Stock</div>
+    </div>
+
+    <!-- ── TAB: STOCK SEARCH GRID ── -->
+    <div class="tab-panel active" id="tab-grid">
+      <div class="tbl-toolbar">
+        <div class="tbl-toolbar-l">
+          <div class="search-box">🔎 <input id="gridQuickFind" placeholder="Filter visible rows…"></div>
+          <span style="font-size:11px;color:var(--mut);" id="gridCount"></span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="copyBtn">📋 Copy Page</button>
+          <button class="btn btn-ghost btn-sm" id="exportCsvBtn">⬇ Export CSV</button>
+          <button class="btn btn-primary btn-sm" id="exportXlsBtn">⬇ Export Excel</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div class="tbl-scroll">
+          <table id="mainTable">
+            <thead><tr id="mainTableHead"></tr><tr id="mainTableFilterRow" class="filter-row"></tr></thead>
+            <tbody id="mainTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="pager">
+        <div>Rows per page:
+          <select class="pagesize" id="pageSizeSel">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+          </select>
+        </div>
+        <div id="pagerInfo"></div>
+        <div class="pager-btns">
+          <button id="pgFirst">&laquo;</button>
+          <button id="pgPrev">&lsaquo;</button>
+          <button id="pgNext">&rsaquo;</button>
+          <button id="pgLast">&raquo;</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: BRANCH X SEGMENT CONCENTRATION ── -->
+    <div class="tab-panel" id="tab-concentration">
+      <div class="sec first">Branch &times; Segment Concentration</div>
+      <div class="card">
+        <div class="ct">
+          <span id="heatmapTitle">Qty(Pcs) by Branch &amp; Segment</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <label for="heatmapMetric" style="font-size:10px;color:var(--mut);font-weight:600;">Metric:</label>
+            <select id="heatmapMetric" class="sp-input" style="width:auto;padding:5px 8px;font-size:11px;">
+              <option value="closing_qty" selected>PCS</option>
+              <option value="total_fa_calculation">SqrMtr</option>
+              <option value="total_notional_area">N/A</option>
+              <option value="closing_value">Amt in Lacs</option>
+            </select>
+            <span class="tag" id="heatmapNote"></span>
+          </span>
+        </div>
+        <div class="heatmap-wrap"><table class="heatmap" id="heatmapTable"></table></div>
+      </div>
+    </div>
+
+    <!-- ── TAB: INVENTORY VALUE SUMMARY ── -->
+    <div class="tab-panel" id="tab-valuesummary">
+      <div class="card">
+        <div class="ct"><span class="vs-title">Inventory Value Summary &mdash; Branch-wise</span>
+          <span class="tag">All Amt in Lacs</span></div>
+        <div style="display:flex;gap:8px;margin:-4px 0 10px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="vsExpandCategoryBtn">⊞ Expand Category Level</button>
+          <button class="btn btn-ghost btn-sm" id="vsExpandBrandBtn">⊞ Expand Brand Level</button>
+          <button class="btn btn-ghost btn-sm" id="vsCollapseCategoryBtn">⊟ Collapse Category Level</button>
+          <button class="btn btn-ghost btn-sm" id="vsCollapseBrandBtn">⊟ Collapse Brand Level</button>
+          <button class="btn btn-primary btn-sm" id="vsExportBtn">⬇ Export to Excel</button>
+        </div>
+        <div class="tbl-scroll" id="valueSummaryScroll" style="max-height:none;">
+          <table id="valueSummaryTable">
+            <thead id="valueSummaryHead"></thead>
+            <tbody id="valueSummaryBody"></tbody>
+            <tfoot id="valueSummaryFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: MANAGEMENT ANALYTICS ── -->
+    <div class="tab-panel" id="tab-management">
+      <div class="g2 mb">
+        <div class="card">
+          <div class="ct"><span>Top 20 Items by Available FA (SqrMtr)</span></div>
+          <div class="chart-wrap tall"><canvas id="chartTop20Fa"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="ct"><span>Top 20 Items by Stock Value</span></div>
+          <div class="chart-wrap tall"><canvas id="chartTop20Val"></canvas></div>
+        </div>
+      </div>
+      <div class="g2 mb">
+        <div class="card">
+          <div class="ct"><span>Branch-wise Stock Value</span></div>
+          <div class="chart-wrap"><canvas id="chartBranchValue"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="ct"><span>Stock Concentration &mdash; Share of Total FA by Branch</span></div>
+          <div class="chart-wrap"><canvas id="chartConcentration"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: OVERVIEW ── -->
+    <div class="tab-panel" id="tab-overview">
+      <div class="g2 mb">
+        <div class="card">
+          <div class="ct"><span>Stock by Branch (Total FA, SqrMtr)</span><span class="tag">click a bar to drill down</span></div>
+          <div class="chart-wrap"><canvas id="chartBranch"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="ct"><span>Stock by Segment</span></div>
+          <div class="chart-wrap"><canvas id="chartSegment"></canvas></div>
+        </div>
+      </div>
+      <div class="g2 mb">
+        <div class="card">
+          <div class="ct"><span>Stock by Warehouse (Top 15)</span></div>
+          <div class="chart-wrap tall"><canvas id="chartWarehouse"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="ct"><span>Stock by Thickness (mm)</span></div>
+          <div class="chart-wrap tall"><canvas id="chartThickness"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: LOW / ZERO STOCK ── -->
+    <div class="tab-panel" id="tab-lowstock">
+      <div class="kpi-grid" id="lowStockKpis"></div>
+      <div class="card">
+        <div class="ct"><span>Zero / Negative / Flagged Stock Items</span>
+          <span class="tag">Group Grade uses the business rule already computed upstream (Red / Yellow / Green)</span></div>
+        <div class="tbl-scroll" style="max-height:480px;">
+          <table id="lowStockTable">
+            <thead><tr>
+              <th>Branch</th><th>Warehouse</th><th>Item Code</th><th>Item Name</th><th>Batch</th>
+              <th class="nr">Closing Qty</th><th class="nr">Total FA</th><th>Status</th>
+            </tr></thead>
+            <tbody id="lowStockBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   CONFIG
+   ════════════════════════════════════════════════════════════════════ */
+const BUILD_STAMP = 'FG Stock Dashboard build 2026-08-01-KPI6-19 — heatmap Value metric renamed to "Amt in Lacs" with no L suffix on cells; added a 6th "Total NA" KPI card';
+console.log('[BUILD]', BUILD_STAMP);
+const SB_URL    = 'https://zzawutnztjfbdtvaohxm.supabase.co';
+const SB_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6YXd1dG56dGpmYmR0dmFvaHhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMTc3NDgsImV4cCI6MjA5Mzg5Mzc0OH0.4SWilQgGgIT6TWvkwVwXDZ4wcfvAVXqdeDrITo4tVUQ';
+const SB_SCHEMA = 'DUROPLY';
+const SB_TABLE  = 'fg_closing_stock';
+const AUTH_HANDOFF_KEY = 'duroply_auth_handoff';
+const PAGE_FETCH_SIZE  = 1000;   // PostgREST per-request cap
+const MAX_FETCH_PAGES  = 500;    // safety cap ~500k rows
+
+const SELECT_COLS = [
+  'row_no','branch_name','whs_name','item_no','item_name','batch_num','ntd_spec_name',
+  'closing_qty','closing_value','total_fa_calculation','total_notional_area','weight','source_name',
+  'segment_name','category_name','brand_name','sub_brand_name','design_name','grade_name',
+  'thickness_mm','length_m','width_m','group_status','group_grade','as_on_date'
+].join(',');
+
+/* Columns shown in the main search grid, in order. */
+const GRID_COLS = [
+  {key:'whs_name',     label:'Warehouse',     freeze:true},
+  {key:'item_no',      label:'Item Code'},
+  {key:'item_name',    label:'Item Name'},
+  {key:'ntd_spec_name',label:'NTD Spec'},
+  {key:'closing_qty',  label:'Qty(Pcs)',   num:true},
+  {key:'total_fa_calculation', label:'Sqr Mtr', num:true},
+  {key:'batch_num',    label:'Batch No.'},
+];
+
+/* ════════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════════ */
+let sbClient = null;
+var _allRows = [];          // full dataset as loaded from Supabase (var, not let: so window._allRows works from the separate GitHub Sync script block)
+let _currentUser = null;
+let _filtered = [];         // rows after applying current filters
+let _sort = {key:'whs_name', dir:'asc'};
+let _page = 1, _pageSize = 50;
+let _charts = {};
+let _msel = {};             // multi-select state per filter key: Set of selected values
+let _colFilters = {};       // per-column search text typed directly into the Stock Search Grid header (key -> lowercase text)
+let _drillBranch = null;    // set when a branch bar is clicked, added on top of msel filters
+let _vsExpanded = new Set(); // Inventory Value Summary: keys of currently expanded drill-down nodes
+
+const FILTER_FIELDS = [
+  'branch_name','whs_name','segment_name','sub_brand_name',
+  'thickness_mm','length_m','width_m','ntd_spec_name',
+  'source_name','group_status','group_grade'
+];
+FILTER_FIELDS.forEach(k => _msel[k] = new Set());
+
+/* ════════════════════════════════════════════════════════════════════
+   UTILITIES
+   ════════════════════════════════════════════════════════════════════ */
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+function fmtInt(n){ return (n===null||n===undefined||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-IN'); }
+// No comma grouping at all (e.g. 248264, not 248,264 or 2,48,264) — used
+// only for Qty(Pcs) figures, per specific request to drop the comma
+// pattern entirely from that column/metric.
+function fmtIntPlain(n){ return (n===null||n===undefined||isNaN(n)) ? '—' : String(Math.round(n)); }
+// Same idea as fmtIntPlain but keeps decimal places — used for Sqr Mtr
+// figures, which should also show plain numbers with no comma grouping.
+function fmtNumPlain(n,d=2){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toFixed(d); }
+function fmtNum(n,d=2){ return (n===null||n===undefined||isNaN(n)) ? '—' : Number(n).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+// Formats a Postgres "date" value (YYYY-MM-DD, or an ISO timestamp with
+// that prefix) as "DD-Mon-YYYY" for display in the header banner. Parsed
+// as plain text (not via `new Date`) so it can't drift a day depending on
+// the browser's local timezone offset from UTC.
+const _ASOD_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtAsOnDate(v){
+  if(!v) return '—';
+  const m = String(v).slice(0,10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return String(v);
+  const mi = parseInt(m[2],10)-1;
+  return (mi>=0 && mi<12) ? `${m[3]}-${_ASOD_MONTHS[mi]}-${m[1]}` : String(v);
+}
+function fmtMoney(n){
+  if(n===null||n===undefined||isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  if(abs>=10000000) return '₹'+(n/10000000).toFixed(2)+' Cr';
+  if(abs>=100000) return '₹'+(n/100000).toFixed(2)+' L';
+  return '₹'+Math.round(n).toLocaleString('en-IN');
+}
+function setLoading(msg,show=true){
+  const ov = $('#loadingOverlay');
+  if(show){ ov.style.display='flex'; $('#loadingMsg').textContent = msg; }
+  else{ ov.style.display='none'; }
+}
+function showErr(msg){
+  const el = $('#errBanner');
+  if(!msg){ el.style.display='none'; el.textContent=''; return; }
+  el.style.display='block'; el.textContent = msg;
+}
+function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function uniqSorted(arr){
+  return Array.from(new Set(arr.filter(v=>v!==null && v!==undefined && v!=='')))
+    .sort((a,b)=> (typeof a==='number' && typeof b==='number') ? a-b : String(a).localeCompare(String(b)));
+}
+function escHtml(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function csvCell(v){
+  if(v===null||v===undefined) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function downloadBlob(content,filename,mime){
+  const blob = new Blob([content],{type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   AUTH — consumes the launcher's handoff (no standalone login screen).
+   If no handoff is present (e.g. file opened directly), the dashboard
+   proceeds as an unscoped viewer, matching the current Sales/Purchase
+   MIS Dashboard behavior.
+   ════════════════════════════════════════════════════════════════════ */
+function buildSbClient(){
+  if(!window.supabase || !window.supabase.createClient){
+    showErr('Supabase client library failed to load from CDN — check your internet connection and reload.');
+    return null;
+  }
+  return window.supabase.createClient(SB_URL, SB_KEY, {
+    db:{schema:SB_SCHEMA},
+    auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false}
+  });
+}
+
+function consumeAuthHandoff(){
+  // The app-launcher hands off credentials two different ways depending on
+  // how this dashboard was launched:
+  //   1) window.__duroplyAuthHandoff — set directly on this window object.
+  //      This is the launcher's primary path for HTML-content apps opened
+  //      via window.open('about:blank') + document.write(): localStorage
+  //      is partitioned/opaque for such windows in some browsers, so the
+  //      launcher attaches the handoff straight to the popup window instead.
+  //   2) localStorage[AUTH_HANDOFF_KEY] — used when this page is reached
+  //      via a normal same-origin navigation (URL-type app entry), where
+  //      localStorage is reliably shared with the opener.
+  // Check the window property first since it's the more common path for
+  // this dashboard; fall back to localStorage for the other launch method.
+  try{
+    if(window.__duroplyAuthHandoff){
+      const h = window.__duroplyAuthHandoff;
+      try{ delete window.__duroplyAuthHandoff; }catch(_){}
+      return h;
+    }
+  }catch(_){}
+  try{
+    const raw = localStorage.getItem(AUTH_HANDOFF_KEY);
+    if(!raw) return null;
+    localStorage.removeItem(AUTH_HANDOFF_KEY);
+    return JSON.parse(raw);
+  }catch(_){ return null; }
+}
+
+async function bootstrapAuth(){
+  sbClient = buildSbClient();
+  if(!sbClient) return true;
+
+  const handoff = consumeAuthHandoff();
+  try{ await sbClient.auth.signOut(); }catch(_){}
+  try{
+    Object.keys(localStorage).filter(k=>k.startsWith('sb-')||k.includes('supabase.auth')).forEach(k=>localStorage.removeItem(k));
+  }catch(_){}
+
+  if(!handoff){
+    _currentUser = {auth_id:null, id:null, name:'Direct Access', role:'admin', branches:['ALL'], branch:'ALL', email:null};
+    return true;
+  }
+
+  try{
+    const {data,error} = await sbClient.auth.setSession({access_token:handoff.access_token, refresh_token:handoff.refresh_token});
+    if(error || !data || !data.session) throw error || new Error('No session from handoff');
+    const authUser = data.session.user;
+
+    // V2: matches Sales/Purchase dashboards exactly — a missing or
+    // unreadable user_profiles row is a HARD login failure, not something to
+    // paper over with a derived/email name. This is the actual fix for the
+    // "email shows instead of name" issue: it used to silently fall back;
+    // now it fails loudly (and points at the real cause) instead.
+    const res = await sbClient.from('user_profiles').select('id,name,role,branches').eq('auth_id', authUser.id).maybeSingle();
+    if(res.error || !res.data){
+      console.error('[AUTH] user_profiles fetch failed — blocking access (same behavior as Sales/Purchase dashboards). '
+        +'Most common cause: no RLS SELECT policy on user_profiles covering a user reading their own row.', res.error || '(no matching row for this auth_id)');
+      try{ await sbClient.auth.signOut(); }catch(_){}
+      _currentUser = null;
+      return false;
+    }
+
+    const profile = res.data;
+    // 'branch' (singular) is not a real column on user_profiles — only
+    // 'branches' (array) is. Derive the legacy single-branch field from it
+    // here, same convention the app-launcher uses.
+    const derivedBranch = (Array.isArray(profile.branches) && profile.branches[0]) || 'ALL';
+    _currentUser = {...profile, branch: derivedBranch, auth_id:authUser.id, email: profile.email || authUser.email};
+    return true;
+  }catch(e){
+    console.error('[AUTH] handoff sign-in failed:', e);
+    _currentUser = null;
+    return false;
+  }
+}
+
+function renderUserBadge(){
+  const u = _currentUser || {};
+  const name = u.name || deriveNameFromEmail(u.email) || 'Guest';
+  const initial = (name||'?').trim().charAt(0).toUpperCase();
+  $('#userAvatar').textContent = initial;
+  $('#userName').textContent = name;
+  $('#userRole').textContent = (u.role || 'viewer').toUpperCase();
+
+  // GitHub Sync exposes repo coordinates + a Personal Access Token — admin-only.
+  // "Refresh from Cloud" (plain Supabase read) stays available to everyone.
+  const isAdmin = (u.role || '').toLowerCase() === 'admin';
+  const ghBtn = document.getElementById('ghSyncOpenBtn');
+  const ghMini = document.getElementById('ghSyncStatusMini');
+  if(!isAdmin){
+    if(ghBtn) ghBtn.style.display = 'none';
+    if(ghMini) ghMini.style.display = 'none';
+  }
+}
+
+// Turns "sroychoudhury@duroply.com" into "Sroychoudhury" (best-effort — this
+// only runs when user_profiles.name is empty; the real fix is to fill that
+// column in, but the header should never show a raw email in the meantime).
+function deriveNameFromEmail(email){
+  if(!email || typeof email !== 'string') return null;
+  const local = email.split('@')[0];
+  if(!local) return null;
+  const words = local.split(/[._\-+0-9]+/).filter(Boolean);
+  if(!words.length) return null;
+  return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DATA NORMALIZATION — runtime cleanup of known naming inconsistencies
+   in the source data, applied to every row right after it's loaded
+   (regardless of which of the three load paths brought it in: the main
+   Supabase fetch, or either GitHub-snapshot path). This does NOT change
+   anything in Supabase itself — it only normalizes what this dashboard
+   displays/filters/aggregates on.
+     • sub_brand_name: "DURO PLUS"  → "DUROPLUS"
+     • segment_name:   "PLY WOOD"   → "PLYWOOD"
+     • item_name:      both of the above, wherever they appear inside
+       the free-text item name (e.g. "BWP PLY WOOD TOWER 12mm…")
+   Case-insensitive and whitespace-tolerant (matches "Duro Plus",
+   "duro  plus", "Ply Wood", etc.) so odd data-entry casing/spacing
+   still gets caught. Uses \s+ (real whitespace) rather than \s* so an
+   already-correct "PLYWOOD"/"DUROPLUS" (no space) is left untouched.
+   ════════════════════════════════════════════════════════════════════ */
+const RE_DURO_PLUS = /\bDURO\s+PLUS\b/gi;
+const RE_PLY_WOOD  = /\bPLY\s+WOOD\b/gi;
+function normalizeBrandTerms(rows){
+  for(const r of rows){
+    if(typeof r.sub_brand_name === 'string') r.sub_brand_name = r.sub_brand_name.replace(RE_DURO_PLUS, 'DUROPLUS');
+    if(typeof r.segment_name === 'string')   r.segment_name   = r.segment_name.replace(RE_PLY_WOOD, 'PLYWOOD');
+    if(typeof r.item_name === 'string'){
+      r.item_name = r.item_name.replace(RE_DURO_PLUS, 'DUROPLUS').replace(RE_PLY_WOOD, 'PLYWOOD');
+    }
+  }
+  return rows;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DATA LOADING — chunked fetch of the full (RLS-scoped) table.
+   All filtering/sorting/aggregation happens client-side afterward,
+   which keeps the search experience instant. For datasets that grow
+   well past ~50k rows, swap this for server-side range()+filter()
+   pagination (the query-builder below already isolates that logic).
+   ════════════════════════════════════════════════════════════════════ */
+async function loadAllData(){
+  showErr(null);
+  setLoading('FETCHING FG_CLOSING_STOCK…');
+  let rows = [];
+  try{
+    for(let p=0;p<MAX_FETCH_PAGES;p++){
+      const from = p*PAGE_FETCH_SIZE, to = from+PAGE_FETCH_SIZE-1;
+      const {data, error} = await sbClient.from(SB_TABLE).select(SELECT_COLS).order('row_no',{ascending:true}).range(from,to);
+      if(error) throw error;
+      if(!data || data.length===0) break;
+      rows = rows.concat(data);
+      setLoading(`FETCHING FG_CLOSING_STOCK… ${rows.length.toLocaleString('en-IN')} ROWS`);
+      if(data.length < PAGE_FETCH_SIZE) break;
+    }
+  }catch(e){
+    console.error('[DATA] load failed:', e);
+    showErr('Could not load data from Supabase ('+SB_SCHEMA+'.'+SB_TABLE+'): '+(e.message||e)+'. Check that the schema is exposed to PostgREST and that RLS allows this session to SELECT.');
+    setLoading('',false);
+    return false;
+  }
+  _allRows = normalizeBrandTerms(rows);
+  setLoading('',false);
+  return true;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FILTER PANEL — multi-select popovers built from distinct data values
+   ════════════════════════════════════════════════════════════════════ */
+const FIELD_LABELS = {
+  branch_name:'Branch', whs_name:'Warehouse', segment_name:'Segment',
+  sub_brand_name:'Sub Brand', thickness_mm:'Thickness (mm)', length_m:'Length (m)',
+  width_m:'Width (m)', ntd_spec_name:'NTD Spec',
+  source_name:'Source', group_status:'Status', group_grade:'Grade Flag'
+};
+
+function distinctValuesFor(field){
+  // Warehouse narrows to the currently-selected branches (if any) for usability.
+  let base = _allRows;
+  if(field==='whs_name' && _msel.branch_name.size>0){
+    base = _allRows.filter(r=>_msel.branch_name.has(r.branch_name));
+  }
+  return uniqSorted(base.map(r=>r[field]));
+}
+
+function buildMultiSelect(field){
+  const container = document.getElementById('f_'+field);
+  const label = FIELD_LABELS[field];
+  container.innerHTML = `
+    <div class="sp-lbl"><span>${label}</span><span class="cnt" id="cnt_${field}"></span></div>
+    <div class="msel">
+      <button class="msel-btn" id="btn_${field}">All ${label}</button>
+      <div class="msel-pop" id="pop_${field}">
+        <input class="msel-search" placeholder="Search…" id="search_${field}">
+        <div class="msel-actions">
+          <button data-act="all" data-f="${field}">Select All</button>
+          <button data-act="none" data-f="${field}">Clear</button>
+          <button data-act="go" data-f="${field}" style="margin-left:auto;background:var(--ora);color:#fff;border-color:var(--ora);font-weight:700;">Go ✓</button>
+        </div>
+        <div id="opts_${field}"></div>
+      </div>
+    </div>`;
+  const btn = document.getElementById('btn_'+field);
+  const pop = document.getElementById('pop_'+field);
+  // The dropdown's own contents (checkboxes, search box, action buttons) must
+  // never let their click bubble up to the document — a document-level click
+  // listener elsewhere closes every open dropdown on any outside click, and
+  // without this it was also closing the dropdown on every single checkbox
+  // click (making multi-select look broken) and on clicking into the search
+  // box itself (making the search look non-functional).
+  pop.addEventListener('click', e=>e.stopPropagation());
+  btn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    $$('.msel-pop.open').forEach(p=>{ if(p!==pop) p.classList.remove('open'); });
+    pop.classList.toggle('open');
+    if(pop.classList.contains('open')) renderMselOptions(field);
+  });
+  document.getElementById('search_'+field).addEventListener('input', ()=>renderMselOptions(field));
+  pop.querySelectorAll('.msel-actions button').forEach(b=>{
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(b.dataset.act==='go'){ pop.classList.remove('open'); return; }
+      // Select All / Clear must respect whatever the search box is currently
+      // narrowing the list to — e.g. typing "de" and hitting Select All
+      // should only select DELHI/HYDERABAD (the visible matches), not every
+      // branch in the dataset. Any selections outside the current search
+      // (made earlier, before narrowing) are left untouched either way.
+      const term = (document.getElementById('search_'+field).value||'').toLowerCase();
+      const allOpts = distinctValuesFor(field);
+      const opts = term ? allOpts.filter(v=>String(v).toLowerCase().includes(term)) : allOpts;
+      if(b.dataset.act==='all') opts.forEach(v=>_msel[field].add(v));
+      else if(term) opts.forEach(v=>_msel[field].delete(v));
+      else _msel[field].clear();
+      renderMselOptions(field);
+      renderMselButtonLabel(field);
+      renderChips();
+      applyFiltersAndRender();
+      if(field==='branch_name'){
+        renderMselOptions('whs_name');
+        renderMselButtonLabel('whs_name');
+      }
+    });
+  });
+  renderMselButtonLabel(field);
+  updateFilterCount(field);
+}
+
+// Shows the "(N)" distinct-value count next to a filter's label — called
+// right when the filter is built (so counts appear immediately, the same
+// way Warehouse's count already did) and again whenever the underlying
+// option list changes (e.g. Warehouse narrowing after a Branch pick).
+function updateFilterCount(field){
+  const el = document.getElementById('cnt_'+field);
+  if(!el) return;
+  const opts = distinctValuesFor(field);
+  el.textContent = opts.length ? `(${opts.length})` : '';
+}
+
+function renderMselOptions(field){
+  const term = (document.getElementById('search_'+field).value||'').toLowerCase();
+  const opts = distinctValuesFor(field);
+  updateFilterCount(field);
+  const wrap = document.getElementById('opts_'+field);
+  const filtered = term ? opts.filter(v=>String(v).toLowerCase().includes(term)) : opts;
+  if(filtered.length===0){ wrap.innerHTML = '<div style="font-size:10.5px;color:var(--mut);padding:6px;">No matches</div>'; return; }
+  wrap.innerHTML = filtered.map(v=>{
+    const id = 'opt_'+field+'_'+btoa(unescape(encodeURIComponent(String(v)))).replace(/[^a-zA-Z0-9]/g,'');
+    const checked = _msel[field].has(v) ? 'checked' : '';
+    return `<label class="msel-opt"><input type="checkbox" ${checked} data-f="${field}" data-v="${escHtml(v)}"><span>${escHtml(v)}</span></label>`;
+  }).join('');
+  wrap.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const f=cb.dataset.f, v=cb.dataset.v;
+      if(cb.checked) _msel[f].add(v); else _msel[f].delete(v);
+      renderMselButtonLabel(f);
+      renderChips();
+      applyFiltersAndRender();
+      if(f==='branch_name') renderMselOptions('whs_name'); // keep dependent list fresh while open
+    });
+  });
+}
+
+function renderMselButtonLabel(field){
+  const btn = document.getElementById('btn_'+field);
+  const n = _msel[field].size;
+  const label = FIELD_LABELS[field];
+  if(n===0){ btn.textContent = 'All '+label; btn.classList.remove('active'); }
+  else{ btn.textContent = n===1 ? Array.from(_msel[field])[0] : `${n} ${label} selected`; btn.classList.add('active'); }
+}
+
+function renderChips(){
+  const chips = [];
+  FILTER_FIELDS.forEach(f=>{
+    _msel[f].forEach(v=>chips.push({f,v,label:`${FIELD_LABELS[f]}: ${v}`}));
+  });
+  if(_drillBranch) chips.push({f:'__drill', v:_drillBranch, label:`Drill: ${_drillBranch}`});
+  const textFields = [
+    ['f_item_no_text','Item Code'], ['f_item_name_text','Item Name'], ['f_batch_num_text','Batch No.']
+  ];
+  textFields.forEach(([id,label])=>{
+    const val = document.getElementById(id).value.trim();
+    if(val) chips.push({f:'__text_'+id, v:val, label:`${label}: "${val}"`});
+  });
+  const qtyMin = document.getElementById('f_qty_min').value;
+  if(qtyMin) chips.push({f:'__qty', v:qtyMin, label:`Qty ≥ ${qtyMin}`});
+  const faMin = document.getElementById('f_fa_min').value;
+  if(faMin) chips.push({f:'__fa', v:faMin, label:`FA ≥ ${faMin}`});
+
+  $('#activeChips').innerHTML = chips.map(c=>
+    `<span class="chip">${escHtml(c.label)}<b data-chip='${escHtml(JSON.stringify(c))}'>&times;</b></span>`
+  ).join('');
+  $('#filterSummary').textContent = `${chips.length} filter${chips.length===1?'':'s'} active`;
+
+  $$('.chip b').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const c = JSON.parse(b.dataset.chip);
+      if(c.f==='__drill'){ _drillBranch=null; }
+      else if(c.f==='__qty'){ document.getElementById('f_qty_min').value=''; }
+      else if(c.f==='__fa'){ document.getElementById('f_fa_min').value=''; }
+      else if(c.f.startsWith('__text_')){ document.getElementById(c.f.replace('__text_','')).value=''; }
+      else { _msel[c.f].delete(c.v); renderMselButtonLabel(c.f); }
+      renderChips();
+      applyFiltersAndRender();
+    });
+  });
+}
+
+document.addEventListener('click', ()=> $$('.msel-pop.open').forEach(p=>p.classList.remove('open')) );
+
+function clearAllFilters(){
+  FILTER_FIELDS.forEach(f=>{ _msel[f].clear(); renderMselButtonLabel(f); });
+  _drillBranch = null;
+  ['f_item_no_text','f_item_name_text','f_batch_num_text','f_qty_min','f_fa_min','quickSearch'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value='';
+  });
+  _colFilters = {};
+  $$('#mainTableFilterRow input').forEach(inp=>{ inp.value=''; });
+  renderChips();
+  applyFiltersAndRender();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   APPLY FILTERS (client-side, over the full loaded dataset)
+   ════════════════════════════════════════════════════════════════════ */
+function applyFilters(){
+  const quick = ($('#quickSearch').value||'').trim().toLowerCase();
+  const itemNoT = document.getElementById('f_item_no_text').value.trim().toLowerCase();
+  const itemNameT = document.getElementById('f_item_name_text').value.trim().toLowerCase();
+  const batchT = document.getElementById('f_batch_num_text').value.trim().toLowerCase();
+  const qtyMin = parseFloat(document.getElementById('f_qty_min').value);
+  const faMin = parseFloat(document.getElementById('f_fa_min').value);
+  const hasQtyMin = !isNaN(qtyMin), hasFaMin = !isNaN(faMin);
+
+  return _allRows.filter(r=>{
+    for(const f of FILTER_FIELDS){
+      if(_msel[f].size>0 && !_msel[f].has(r[f])) return false;
+    }
+    if(_drillBranch && r.branch_name !== _drillBranch) return false;
+    if(itemNoT && !String(r.item_no||'').toLowerCase().includes(itemNoT)) return false;
+    if(itemNameT && !String(r.item_name||'').toLowerCase().includes(itemNameT)) return false;
+    if(batchT && !String(r.batch_num||'').toLowerCase().includes(batchT)) return false;
+    if(hasQtyMin && (r.closing_qty===null || r.closing_qty < qtyMin)) return false;
+    if(hasFaMin && (r.total_fa_calculation===null || r.total_fa_calculation < faMin)) return false;
+    // Per-column search boxes typed directly into the Stock Search Grid header —
+    // each term is a case-insensitive substring match; separate multiple terms
+    // with "*" to require ALL of them to be present (e.g. "DEL*SALEABLE" matches
+    // cells containing both "del" and "saleable", in any order).
+    for(const c of GRID_COLS){
+      const fv = _colFilters[c.key];
+      if(fv){
+        const cellStr = String(r[c.key] ?? '').toLowerCase();
+        const terms = fv.split('*').map(t=>t.trim()).filter(Boolean);
+        if(terms.length && !terms.every(t=>cellStr.includes(t))) return false;
+      }
+    }
+    if(quick){
+      const hay = `${r.item_name||''} ${r.item_no||''} ${r.batch_num||''}`.toLowerCase();
+      if(!hay.includes(quick)) return false;
+    }
+    return true;
+  });
+}
+
+function applyFiltersAndRender(){
+  _filtered = applyFilters();
+  _page = 1;
+  renderAll();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   AGGREGATIONS
+   ════════════════════════════════════════════════════════════════════ */
+function sum(arr,key){ return arr.reduce((s,r)=> s + (Number(r[key])||0), 0); }
+function groupSum(arr,keyField,valField){
+  const m = new Map();
+  arr.forEach(r=>{
+    const k = r[keyField] ?? '(Blank)';
+    m.set(k, (m.get(k)||0) + (Number(r[valField])||0));
+  });
+  return m;
+}
+
+function computeKpis(rows){
+  return {
+    branches: new Set(rows.map(r=>r.branch_name)).size,
+    warehouses: new Set(rows.map(r=>r.whs_name)).size,
+    items: new Set(rows.map(r=>r.item_no)).size,
+    batches: new Set(rows.filter(r=>r.batch_num).map(r=>r.batch_num)).size,
+    rows: rows.length,
+    closingQty: sum(rows,'closing_qty'),
+    totalFa: sum(rows,'total_fa_calculation'),
+    totalNA: sum(rows,'total_notional_area'),
+    stockValue: sum(rows,'closing_value'),
+    zeroNeg: rows.filter(r=>(r.closing_qty??0) <= 0).length,
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER: KPI STRIP
+   ════════════════════════════════════════════════════════════════════ */
+function renderKpis(){
+  const k = computeKpis(_filtered);
+  const cards = [
+    {lbl:'Total Warehouses', val:fmtInt(k.warehouses), cls:'tea'},
+    {lbl:'Closing Qty (PCS)', val:fmtIntPlain(k.closingQty), cls:'ora'},
+    {lbl:'Total FA', val:fmtIntPlain(k.totalFa), cls:'grn'},
+    {lbl:'Total NA', val:fmtIntPlain(k.totalNA), cls:'pur'},
+    {lbl:'Stock Value', val:fmtMoney(k.stockValue), cls:'pnk'},
+    {lbl:'Zero / Neg Stock', val:fmtInt(k.zeroNeg), cls:'red'},
+  ];
+  $('#kpiGrid').innerHTML = cards.map(c=>`
+    <div class="kpi ${c.cls}">
+      <div class="kpi-lbl">${c.lbl}</div>
+      <div class="kpi-val">${c.val}</div>
+    </div>`).join('');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER: CHARTS (Chart.js)
+   ════════════════════════════════════════════════════════════════════ */
+const PALETTE = ['#45607A','#C1793D','#4C7A4F','#8C7A9B','#8A6A1F','#3D7A8A','#1F5C56','#A23B32','#6B7A45','#9B6B4A'];
+
+function destroyChart(id){ if(_charts[id]){ _charts[id].destroy(); delete _charts[id]; } }
+
+function barChart(canvasId, labels, data, opts={}){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  _charts[canvasId] = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data, backgroundColor: opts.color || '#45607A', borderRadius:4, maxBarThickness:28 }] },
+    options:{
+      indexAxis: opts.horizontal ? 'y' : 'x',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:(c)=> ' '+fmtNum(c.parsed[opts.horizontal?'x':'y'],1) } } },
+      scales:{
+        x:{ grid:{display:!opts.horizontal}, ticks:{font:{size:9.5}} },
+        y:{ grid:{display:opts.horizontal}, ticks:{font:{size:9.5}} }
+      },
+      onClick: opts.onClick ? (evt, els)=>{ if(els.length) opts.onClick(labels[els[0].index]); } : undefined
+    }
+  });
+}
+
+function donutChart(canvasId, labels, data){
+  destroyChart(canvasId);
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  _charts[canvasId] = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>PALETTE[i%PALETTE.length]), borderWidth:2, borderColor:'#fff' }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right', labels:{font:{size:10},boxWidth:11} } } }
+  });
+}
+
+function renderOverviewCharts(){
+  if(_filtered.length===0){
+    ['chartBranch','chartSegment','chartWarehouse','chartThickness'].forEach(destroyChart);
+    return;
+  }
+  const byBranch = groupSum(_filtered,'branch_name','total_fa_calculation');
+  const branchEntries = Array.from(byBranch.entries()).sort((a,b)=>b[1]-a[1]);
+  barChart('chartBranch', branchEntries.map(e=>e[0]), branchEntries.map(e=>Math.round(e[1])), {
+    color:'#45607A', onClick:(label)=>{ _drillBranch = (_drillBranch===label)?null:label; renderChips(); applyFiltersAndRender(); }
+  });
+
+  const bySeg = groupSum(_filtered,'segment_name','total_fa_calculation');
+  const segEntries = Array.from(bySeg.entries()).sort((a,b)=>b[1]-a[1]);
+  donutChart('chartSegment', segEntries.map(e=>e[0]), segEntries.map(e=>Math.round(e[1])));
+
+  const byWhs = groupSum(_filtered,'whs_name','total_fa_calculation');
+  const whsEntries = Array.from(byWhs.entries()).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  barChart('chartWarehouse', whsEntries.map(e=>e[0]), whsEntries.map(e=>Math.round(e[1])), {color:'#4C7A4F', horizontal:true});
+
+  const byThk = groupSum(_filtered,'thickness_mm','total_fa_calculation');
+  const thkEntries = Array.from(byThk.entries()).sort((a,b)=> (Number(a[0])||0)-(Number(b[0])||0));
+  barChart('chartThickness', thkEntries.map(e=> e[0]+' mm'), thkEntries.map(e=>Math.round(e[1])), {color:'#8A6A1F', horizontal:true});
+}
+
+function renderManagementCharts(){
+  if(_filtered.length===0){
+    ['chartTop20Fa','chartTop20Val','chartBranchValue','chartConcentration'].forEach(destroyChart);
+    return;
+  }
+  const byItemFa = new Map();
+  const byItemVal = new Map();
+  _filtered.forEach(r=>{
+    const label = (r.item_name||r.item_no||'—').slice(0,42);
+    byItemFa.set(label, (byItemFa.get(label)||0) + (Number(r.total_fa_calculation)||0));
+    byItemVal.set(label, (byItemVal.get(label)||0) + (Number(r.closing_value)||0));
+  });
+  const top20Fa = Array.from(byItemFa.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  barChart('chartTop20Fa', top20Fa.map(e=>e[0]), top20Fa.map(e=>Math.round(e[1])), {color:'#8C7A9B', horizontal:true});
+
+  const top20Val = Array.from(byItemVal.entries()).sort((a,b)=>b[1]-a[1]).slice(0,20);
+  barChart('chartTop20Val', top20Val.map(e=>e[0]), top20Val.map(e=>Math.round(e[1])), {color:'#3D7A8A', horizontal:true});
+
+  const byBranchVal = groupSum(_filtered,'branch_name','closing_value');
+  const branchValEntries = Array.from(byBranchVal.entries()).sort((a,b)=>b[1]-a[1]);
+  barChart('chartBranchValue', branchValEntries.map(e=>e[0]), branchValEntries.map(e=>Math.round(e[1])), {color:'#C1793D'});
+
+  const byBranchFa = groupSum(_filtered,'branch_name','total_fa_calculation');
+  const totalFaAll = sum(_filtered,'total_fa_calculation') || 1;
+  const concEntries = Array.from(byBranchFa.entries()).sort((a,b)=>b[1]-a[1]);
+  donutChart('chartConcentration', concEntries.map(e=>e[0]), concEntries.map(e=>Math.round((e[1]/totalFaAll)*1000)/10));
+}
+
+/* ── Branch × Segment heatmap ──────────────────────────────────── */
+// Always shows Lacs, never switching to Crore like fmtMoney does — used only
+// for the Branch x Segment Concentration heatmap's "Amt in Lacs" metric, so
+// every cell (and the totals row) is in the same unit and can be
+// summed/compared directly, instead of some cells showing "L" and others
+// "Cr". No unit suffix on the number itself — the column header/metric
+// name ("Amt in Lacs") already states the unit once, for the whole table.
+function fmtLacs(n){
+  if(n===null||n===undefined||isNaN(n)) return '—';
+  return '₹'+(n/100000).toFixed(2);
+}
+const HEATMAP_METRICS = {
+  closing_qty:          { label:'Qty(Pcs)', fmt:v=>fmtIntPlain(v) },
+  total_fa_calculation: { label:'Sqr Mtr',  fmt:v=>fmtIntPlain(v) },
+  total_notional_area:  { label:'N/A',      fmt:v=>fmtInt(v) },
+  closing_value:        { label:'Amt in Lacs', fmt:v=>fmtLacs(v) }
+};
+let _heatmapMetric = 'closing_qty'; // default: Pcs
+
+function renderHeatmap(){
+  const el = $('#heatmapTable');
+  const metricKey = HEATMAP_METRICS[_heatmapMetric] ? _heatmapMetric : 'closing_qty';
+  const metric = HEATMAP_METRICS[metricKey];
+  const titleEl = $('#heatmapTitle');
+  if(titleEl) titleEl.textContent = metric.label+' by Branch & Segment';
+  if(_filtered.length===0){ el.innerHTML=''; $('#heatmapNote').textContent=''; return; }
+  const branches = uniqSorted(_filtered.map(r=>r.branch_name));
+  const segments = uniqSorted(_filtered.map(r=>r.segment_name));
+  const matrix = {};
+  let maxVal = 0;
+  branches.forEach(b=>{ matrix[b]={}; segments.forEach(s=>matrix[b][s]=0); });
+  _filtered.forEach(r=>{
+    const b=r.branch_name, s=r.segment_name;
+    if(!matrix[b]) return;
+    matrix[b][s] = (matrix[b][s]||0) + (Number(r[metricKey])||0);
+    if(matrix[b][s] > maxVal) maxVal = matrix[b][s];
+  });
+  $('#heatmapNote').textContent = `${branches.length} branches × ${segments.length} segments`;
+  let html = '<thead><tr><th>Branch</th>' + segments.map(s=>`<th>${escHtml(s)}</th>`).join('') + '</tr></thead><tbody>';
+  branches.forEach(b=>{
+    html += `<tr><td class="rowlbl">${escHtml(b)}</td>`;
+    segments.forEach(s=>{
+      const v = matrix[b][s]||0;
+      const intensity = maxVal>0 ? v/maxVal : 0;
+      // Cream (#fdf6ec) to walnut (#8a5a2b) scale — timber-toned heat scale.
+      const bg = intensity===0 ? 'var(--canvas)' : mixColor('#EADBC8','#8a5a2b', intensity);
+      html += `<td style="background:${bg};">${v>0 ? metric.fmt(v) : '—'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  // Totals row — one sum per segment column, plus a grand total in the
+  // corner cell, styled distinctly (bold/shaded) so it reads as a footer
+  // rather than another branch row.
+  const segTotals = {};
+  segments.forEach(s=>{
+    let t = 0;
+    branches.forEach(b=>{ t += matrix[b][s]||0; });
+    segTotals[s] = t;
+  });
+  html += '<tfoot><tr class="heatmap-total-row">'
+    + `<td class="rowlbl">TOTAL${metricKey==='closing_value' ? ' (Amt in Lacs)' : ''}</td>`
+    + segments.map(s=>`<td>${segTotals[s]>0 ? metric.fmt(segTotals[s]) : '—'}</td>`).join('')
+    + '</tr></tfoot>';
+  el.innerHTML = html;
+}
+function mixColor(hex1, hex2, t){
+  const c1 = hexToRgb(hex1), c2 = hexToRgb(hex2);
+  const r = Math.round(c1.r + (c2.r-c1.r)*t);
+  const g = Math.round(c1.g + (c2.g-c1.g)*t);
+  const b = Math.round(c1.b + (c2.b-c1.b)*t);
+  return `rgb(${r},${g},${b})`;
+}
+function hexToRgb(hex){
+  const n = parseInt(hex.replace('#',''),16);
+  return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER: MAIN SEARCH GRID
+   ════════════════════════════════════════════════════════════════════ */
+function renderGridHead(){
+  $('#mainTableHead').innerHTML = GRID_COLS.map(c=>{
+    const sorted = _sort.key===c.key;
+    const arrow = sorted ? (_sort.dir==='asc'?'▲':'▼') : '';
+    return `<th class="${c.num?'nr':''} ${sorted?'sorted':''} ${c.freeze?'freeze':''}" data-key="${c.key}">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+  $$('#mainTableHead th').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      if(_sort.key===key) _sort.dir = _sort.dir==='asc'?'desc':'asc';
+      else { _sort.key = key; _sort.dir='desc'; }
+      renderGrid();
+    });
+  });
+  renderGridFilterRow();
+  syncFilterRowStickyTop();
+}
+
+// Both header rows use position:sticky, but the filter row (search boxes)
+// must sit exactly below the label row rather than both pinning to top:0
+// (which would stack them on top of each other and let the filter row
+// scroll away underneath the label row). The label row's height isn't a
+// fixed constant — e.g. the Qty(Pcs)/Sqr Mtr headers can wrap onto two
+// lines — so this measures it at runtime instead of guessing a pixel
+// value in CSS.
+function syncFilterRowStickyTop(){
+  const headRow = document.getElementById('mainTableHead');
+  const filterRow = document.getElementById('mainTableFilterRow');
+  if(!headRow || !filterRow) return;
+  const h = Math.ceil(headRow.getBoundingClientRect().height);
+  if(!h) return;
+  filterRow.querySelectorAll('th').forEach(th=>{ th.style.top = h+'px'; });
+}
+window.addEventListener('resize', debounce(syncFilterRowStickyTop, 150));
+
+// Built once (not on every render) so the inputs never lose focus/cursor
+// position while the user is mid-keystroke — GRID_COLS itself never changes
+// at runtime, so there's nothing to re-render here after the first pass.
+function renderGridFilterRow(){
+  const row = document.getElementById('mainTableFilterRow');
+  if(!row || row.dataset.built==='1') return;
+  row.dataset.built = '1';
+  row.innerHTML = GRID_COLS.map(c=>
+    `<th class="${c.freeze?'freeze':''}"><input type="text" class="col-filter-input" data-key="${c.key}" placeholder="Search… (a*b = both)" title="Type text to filter this column. Separate multiple terms with * to require all of them, e.g. DEL*SALEABLE"></th>`
+  ).join('');
+  $$('#mainTableFilterRow input').forEach(inp=>{
+    inp.addEventListener('click', e=>e.stopPropagation());
+    inp.addEventListener('input', debounce(()=>{
+      const v = inp.value.trim().toLowerCase();
+      if(v) _colFilters[inp.dataset.key] = v; else delete _colFilters[inp.dataset.key];
+      applyFiltersAndRender();
+    }, 200));
+  });
+}
+
+function sortedFiltered(){
+  const {key,dir} = _sort;
+  const isNum = GRID_COLS.find(c=>c.key===key)?.num;
+  const mult = dir==='asc' ? 1 : -1;
+  return [..._filtered].sort((a,b)=>{
+    let av=a[key], bv=b[key], cmp;
+    if(isNum){ av=Number(av)||0; bv=Number(bv)||0; cmp=(av-bv)*mult; }
+    else { av=String(av??''); bv=String(bv??''); cmp=av.localeCompare(bv)*mult; }
+    if(cmp!==0) return cmp;
+    // Tie-break: within the same Warehouse, always order by Item Name too
+    // (this is what makes "sort by Warehouse, Item Name" the effective
+    // default — clicking other column headers still sorts by that column alone).
+    if(key==='whs_name') return String(a.item_name??'').localeCompare(String(b.item_name??''));
+    return 0;
+  });
+}
+
+function renderGrid(){
+  const rows = sortedFiltered();
+  const totalPages = Math.max(1, Math.ceil(rows.length/_pageSize));
+  if(_page>totalPages) _page = totalPages;
+  const start = (_page-1)*_pageSize;
+  const pageRows = rows.slice(start, start+_pageSize);
+
+  $('#gridCount').textContent = `${fmtInt(rows.length)} matching rows`;
+  $('#mainTableBody').innerHTML = pageRows.map(r=>{
+    const cells = GRID_COLS.map(c=>{
+      let v = r[c.key];
+      if(c.key==='total_fa_calculation') v = fmtNumPlain(v,2);
+      else if(c.key==='closing_qty') v = fmtIntPlain(v);
+      else if(c.num) v = fmtNum(v, 2);
+      else v = escHtml(v ?? '—');
+      return `<td class="${c.num?'nr':''} ${c.freeze?'freeze':''} ${c.key==='item_name'?'col-itemname':''}" title="${c.key==='item_name'?escHtml(r[c.key]??''):(c.key==='closing_qty'||c.key==='total_fa_calculation')?escHtml(v):''}">${v}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('') || `<tr><td colspan="${GRID_COLS.length}" style="text-align:center;color:var(--mut);padding:26px;">No rows match the current filters.</td></tr>`;
+
+  $('#pagerInfo').textContent = rows.length
+    ? `Showing ${fmtInt(start+1)}–${fmtInt(Math.min(start+_pageSize,rows.length))} of ${fmtInt(rows.length)}`
+    : 'No rows';
+  $('#pgFirst').disabled = $('#pgPrev').disabled = _page<=1;
+  $('#pgNext').disabled = $('#pgLast').disabled = _page>=totalPages;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER: LOW / ZERO STOCK TAB
+   ════════════════════════════════════════════════════════════════════ */
+function renderLowStock(){
+  const zero = _filtered.filter(r=>(r.closing_qty??0)===0);
+  const neg = _filtered.filter(r=>(r.closing_qty??0)<0);
+  const red = _filtered.filter(r=>r.group_grade==='Red');
+  const yellow = _filtered.filter(r=>r.group_grade==='Yellow');
+
+  $('#lowStockKpis').innerHTML = [
+    {lbl:'Zero Stock Items', val:fmtInt(zero.length), cls:'gry'},
+    {lbl:'Negative Stock Items', val:fmtInt(neg.length), cls:'red'},
+    {lbl:'Flagged Red', val:fmtInt(red.length), cls:'red'},
+    {lbl:'Flagged Yellow', val:fmtInt(yellow.length), cls:'gld'},
+  ].map(c=>`<div class="kpi ${c.cls==='red'?'red':c.cls==='gld'?'gld':'blu'}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div></div>`).join('');
+
+  const flagged = _filtered.filter(r=>(r.closing_qty??0)<=0 || r.group_grade==='Red' || r.group_grade==='Yellow')
+    .sort((a,b)=>(a.closing_qty??0)-(b.closing_qty??0)).slice(0,500);
+
+  $('#lowStockBody').innerHTML = flagged.map(r=>{
+    let badge = '<span class="badge gry">OK</span>';
+    if((r.closing_qty??0)<0) badge = '<span class="badge red">NEGATIVE</span>';
+    else if((r.closing_qty??0)===0) badge = '<span class="badge red">ZERO STOCK</span>';
+    else if(r.group_grade==='Red') badge = '<span class="badge red">RED</span>';
+    else if(r.group_grade==='Yellow') badge = '<span class="badge yel">YELLOW</span>';
+    return `<tr>
+      <td>${escHtml(r.branch_name)}</td><td>${escHtml(r.whs_name)}</td><td>${escHtml(r.item_no)}</td>
+      <td>${escHtml(r.item_name)}</td><td>${escHtml(r.batch_num||'—')}</td>
+      <td class="nr">${fmtIntPlain(r.closing_qty)}</td><td class="nr">${fmtNumPlain(r.total_fa_calculation,2)}</td><td>${badge}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--mut);padding:24px;">No flagged items in the current filter — stock looks healthy.</td></tr>`;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   RENDER: INVENTORY VALUE SUMMARY — Branch → Product Category → Brand rows,
+   with each distinct source_name (U_SourceNm) pivoted out into its own
+   Qty/NA/AMT/Rt-NA column group, plus a Grand Total group on the right
+   and a Grand Total row at the bottom. Built straight off _filtered (same
+   data source as every other tab — nothing re-queried). Item-code level
+   is never kept: the deepest aggregate is the Brand (DURO / TOWER) bucket.
+   ════════════════════════════════════════════════════════════════════ */
+function vsNewAgg(){ return {qty:0, na:0, val:0}; }
+function vsAccum(bySourceMap, src, r){
+  if(!bySourceMap.has(src)) bySourceMap.set(src, vsNewAgg());
+  const a = bySourceMap.get(src);
+  a.qty += Number(r.closing_qty)||0;
+  a.na  += Number(r.total_notional_area)||0;
+  a.val += Number(r.closing_value)||0;
+}
+// Cost/NA = AMT ÷ NA computed from the *aggregated* totals (not an average
+// of per-row ratios), guarded against zero/blank NA so the UI never shows
+// Infinity/NaN. Plain whole number, no ₹ symbol.
+function vsRtNA(agg){ return agg.na>0 ? fmtInt(agg.val/agg.na) : '—'; }
+// AMT is always shown in Lacs, as a whole number, no ₹ — so every AMT cell
+// in this table uses one consistent unit (never switching to Cr like the
+// general-purpose fmtMoney() does for large values). Anything under 1 Lac
+// would otherwise round away to a misleading "0" or "1", so those show the
+// exact fraction of a Lac instead, with no leading zero (e.g. 95,500 → .955).
+function fmtLacsWhole(n){
+  if(n===null||n===undefined||isNaN(n)) return '—';
+  if(n!==0 && Math.abs(n)<100000){
+    // Clamped to .99 so a value just under 1 Lac never rounds up to a
+    // misleading "1.00" — it's still strictly less than a full Lac.
+    const frac = Math.min(0.99, Math.abs(n)/100000);
+    return (n<0?'-':'') + frac.toFixed(2).replace(/^0/,'');
+  }
+  return Math.round(n/100000).toLocaleString('en-IN');
+}
+function vsNodeTotalVal(bySourceMap){ let v=0; bySourceMap.forEach(a=>v+=a.val); return v; }
+function vsGrandTotalAgg(bySourceMap){
+  const g = vsNewAgg();
+  bySourceMap.forEach(a=>{ g.qty+=a.qty; g.na+=a.na; g.val+=a.val; });
+  return g;
+}
+
+function buildValueSummaryPivot(rows){
+  // branch -> {bySource, categories: category -> {bySource, brands: brand -> {bySource}}}
+  const tree = new Map();
+  const sourcesSet = new Set();
+  rows.forEach(r=>{
+    const b   = r.branch_name || '—';
+    const src = (r.source_name||'').trim() || '—'; // trimmed so a stray trailing space never becomes its own column
+    // Product Category is generated dynamically — never hard-coded — from U_CategoNm + " " + U_SegmenNm.
+    const cat = `${(r.category_name||'').trim()} ${(r.segment_name||'').trim()}`.trim() || '—';
+    const brd = r.brand_name || '—';
+    sourcesSet.add(src);
+
+    if(!tree.has(b)) tree.set(b, {bySource:new Map(), categories:new Map()});
+    const bNode = tree.get(b); vsAccum(bNode.bySource, src, r);
+
+    if(!bNode.categories.has(cat)) bNode.categories.set(cat, {bySource:new Map(), brands:new Map()});
+    const cNode = bNode.categories.get(cat); vsAccum(cNode.bySource, src, r);
+
+    if(!cNode.brands.has(brd)) cNode.brands.set(brd, {bySource:new Map()});
+    const brNode = cNode.brands.get(brd); vsAccum(brNode.bySource, src, r);
+  });
+  // Source columns are derived purely from whatever source_name values are
+  // present in the current filter — nothing hard-coded, so a source that
+  // disappears from the data simply stops getting a column.
+  const sources = Array.from(sourcesSet).sort((a,b)=>String(a).localeCompare(String(b)));
+  return {tree, sources};
+}
+
+function vsSortedEntries(map){
+  return Array.from(map.entries()).sort((a,b)=>vsNodeTotalVal(b[1].bySource)-vsNodeTotalVal(a[1].bySource));
+}
+// Product Categories within a Branch read A→Z rather than value-ranked —
+// branches and brands keep their existing value-ranked order.
+function vsSortedEntriesAlpha(map){
+  return Array.from(map.entries()).sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
+}
+
+let _vsPivot = {tree:new Map(), sources:[]};
+
+function renderValueSummary(){
+  _vsPivot = buildValueSummaryPivot(_filtered);
+  renderValueSummaryRows();
+}
+
+// A rotating set of pastel tints (positional, not tied to any specific
+// source's name) — the same family of accent colors already used for the
+// KPI tiles elsewhere in this dashboard.
+const VS_PASTEL_COUNT = 8;
+// Every source keeps its normal positional pastel shade — including
+// TRADING and TRADING IMPORTED, which each use their own position's color
+// (TRADING = orange/salmon, TRADING IMPORTED = green).
+function vsColorIndexFor(sources, i){
+  return i % VS_PASTEL_COUNT;
+}
+function vsMetricCellsHtml(agg, extraCls){
+  const cls = 'nr' + (extraCls?(' '+extraCls):'');
+  return `<td class="${cls}">${fmtIntPlain(agg.qty)}</td><td class="${cls}">${fmtIntPlain(agg.na)}</td>`
+       + `<td class="${cls}">${fmtLacsWhole(agg.val)}</td><td class="${cls}">${vsRtNA(agg)}</td>`;
+}
+
+// One data row's worth of pivoted cells: 4 metrics per source (each source
+// tinted its own pastel shade), then the Grand Total group (sum across all
+// sources, copper-tinted) at the extreme right.
+function vsPivotCellsHtml(bySourceMap, sources){
+  let html = '';
+  sources.forEach((src,i)=>{ html += vsMetricCellsHtml(bySourceMap.get(src) || vsNewAgg(), 'vs-src-'+vsColorIndexFor(sources,i)); });
+  html += vsMetricCellsHtml(vsGrandTotalAgg(bySourceMap), 'vs-gt');
+  return html;
+}
+
+function vsRowHtml(label, bySourceMap, sources, level, key, expandable, extraClass){
+  const icon = expandable ? `<span class="row-expand-btn">${_vsExpanded.has(key)?'▾':'▸'}</span> ` : '';
+  const rowAttr = expandable ? ` data-vs-toggle="${escHtml(key)}" style="cursor:pointer;"` : '';
+  return `<tr class="${extraClass||''}"${rowAttr}>
+    <td class="freeze" style="padding-left:${level*18}px;">${icon}${escHtml(label)}</td>
+    ${vsPivotCellsHtml(bySourceMap, sources)}
+  </tr>`;
+}
+
+function renderValueSummaryHead(sources){
+  const row1 = `<th class="freeze" rowspan="2">Branch</th>`
+    + sources.map((s,i)=>`<th colspan="4" class="vs-grouphdr vs-src-${vsColorIndexFor(sources,i)}">${escHtml(s)}</th>`).join('')
+    + `<th colspan="4" class="vs-grouphdr vs-gt">Grand Total</th>`;
+  const oneGroup = `<th class="nr">Qty</th><th class="nr">NA</th><th class="nr">AMT</th><th class="nr">Cost/NA</th>`;
+  const row2 = sources.map(()=>oneGroup).join('') + oneGroup;
+  const head = $('#valueSummaryHead');
+  head.innerHTML = `<tr>${row1}</tr><tr class="vs-subhead">${row2}</tr>`;
+  // The metric sub-header row sits directly below the group-label row —
+  // both are position:sticky, so its exact pixel offset is measured at
+  // runtime (mirrors the Stock Search Grid's header/filter-row stacking).
+  const rows = head.children;
+  if(rows.length===2){
+    const h1 = Math.ceil(rows[0].getBoundingClientRect().height);
+    Array.from(rows[1].children).forEach(th=>{ th.style.top = h1+'px'; });
+  }
+}
+
+function renderValueSummaryRows(){
+  const {tree, sources} = _vsPivot;
+  renderValueSummaryHead(sources);
+
+  let html = '';
+  const footBySource = new Map(); // Grand Total row: source -> agg, rolled up from every top-level branch
+
+  vsSortedEntries(tree).forEach(([bName, bNode])=>{
+    const bKey = `b|${bName}`;
+    html += vsRowHtml(bName, bNode.bySource, sources, 0, bKey, true, 'vs-branch');
+    bNode.bySource.forEach((a,src)=>{
+      if(!footBySource.has(src)) footBySource.set(src, vsNewAgg());
+      const f = footBySource.get(src); f.qty+=a.qty; f.na+=a.na; f.val+=a.val;
+    });
+    if(!_vsExpanded.has(bKey)) return;
+
+    vsSortedEntriesAlpha(bNode.categories).forEach(([cName, cNode])=>{
+      const cKey = `${bKey}||c|${cName}`;
+      html += vsRowHtml(cName, cNode.bySource, sources, 1, cKey, true, 'vs-category');
+      if(!_vsExpanded.has(cKey)) return;
+
+      // Brand is the lowest level shown — DURO / TOWER aggregates only,
+      // never the individual item-code rows underneath them.
+      vsSortedEntries(cNode.brands).forEach(([brName, brNode])=>{
+        html += vsRowHtml(brName, brNode.bySource, sources, 2, null, false, 'vs-brand');
+      });
+    });
+  });
+  $('#valueSummaryBody').innerHTML = html
+    || `<tr><td colspan="${1+(sources.length+1)*4}" style="text-align:center;color:var(--mut);padding:20px;">No data</td></tr>`;
+
+  $('#valueSummaryFoot').innerHTML = html
+    ? `<tr class="vs-grandtotal"><td class="freeze">Grand Total</td>${vsPivotCellsHtml(footBySource, sources)}</tr>`
+    : '';
+}
+
+function onValueSummaryClick(e){
+  const row = e.target.closest('tr[data-vs-toggle]');
+  if(!row) return;
+  const key = row.getAttribute('data-vs-toggle');
+  if(_vsExpanded.has(key)) _vsExpanded.delete(key); else _vsExpanded.add(key);
+  renderValueSummaryRows();
+}
+
+// Level-based expand/collapse controls — every branch/category key is
+// derived fresh from the current pivot each time, so nothing is hard-coded.
+// Hierarchy: Branch (always shown) → Product Category → Brand (leaf).
+//   Expand Category Level  — open every branch so Category rows show
+//                             (Brand rows stay hidden).
+//   Expand Brand Level     — open every branch AND category so Brand rows
+//                             show too (the deepest level; fully expanded).
+//   Collapse Category Level— fully collapse back to just Branch rows.
+//   Collapse Brand Level   — hide Brand rows only, leaving Category rows
+//                             visible (same resulting state as "Expand
+//                             Category Level", reached from full expand).
+function vsExpandCategoryLevel(){
+  const next = new Set();
+  _vsPivot.tree.forEach((bNode, bName)=>{ next.add(`b|${bName}`); });
+  _vsExpanded = next;
+  renderValueSummaryRows();
+}
+function vsExpandBrandLevel(){
+  const next = new Set();
+  _vsPivot.tree.forEach((bNode, bName)=>{
+    const bKey = `b|${bName}`;
+    next.add(bKey);
+    bNode.categories.forEach((cNode, cName)=>{ next.add(`${bKey}||c|${cName}`); });
+  });
+  _vsExpanded = next;
+  renderValueSummaryRows();
+}
+function vsCollapseCategoryLevel(){
+  _vsExpanded = new Set();
+  renderValueSummaryRows();
+}
+function vsCollapseBrandLevel(){
+  vsExpandCategoryLevel(); // drop to Category-level depth, same as expanding up to it
+}
+
+window.addEventListener('resize', debounce(()=>renderValueSummaryHead(_vsPivot.sources), 150));
+
+/* ── Inventory Value Summary — Export to Excel ──────────────────────
+   Flattens the full drill-down (every Branch → Product Category → Brand
+   row, regardless of current expand/collapse state) into one sheet, with
+   one Qty/NA/AMT/Rt-NA column group per source plus a Grand Total group —
+   same SpreadsheetML approach as the Stock Search Grid's export, so no
+   extra library is needed. Reflects whatever filters are currently applied. */
+function vsExportFlatRows(){
+  const {tree} = _vsPivot;
+  const out = [];
+  vsSortedEntries(tree).forEach(([bName, bNode])=>{
+    vsSortedEntriesAlpha(bNode.categories).forEach(([cName, cNode])=>{
+      vsSortedEntries(cNode.brands).forEach(([brName, brNode])=>{
+        out.push({branch:bName, category:cName, brand:brName, bySource:brNode.bySource});
+      });
+    });
+  });
+  return out;
+}
+
+function exportValueSummaryExcel(){
+  const { sources } = _vsPivot;
+  const flatRows = vsExportFlatRows();
+  const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const num = n => (n===null||n===undefined||!isFinite(n)) ? 0 : n;
+
+  const metricHeadersFor = label => [`${label} Qty`, `${label} NA`, `${label} AMT (Lacs)`, `${label} Cost/NA`];
+  const headers = ['Branch','Product Category','Brand']
+    .concat(sources.flatMap(s=>metricHeadersFor(s.trim())))
+    .concat(metricHeadersFor('Grand Total'));
+
+  // AMT always renders with exactly 2 decimal places in Excel; NA is rounded
+  // to a whole number (no decimals) — Qty and Cost/NA are also whole
+  // numbers, matching the on-screen report.
+  const metricCellsFor = agg => {
+    const rtna = agg.na>0 ? (agg.val/agg.na) : null;
+    return [
+      `<Cell><Data ss:Type="Number">${num(agg.qty)}</Data></Cell>`,
+      `<Cell><Data ss:Type="Number">${Math.round(num(agg.na))}</Data></Cell>`,
+      `<Cell ss:StyleID="num2"><Data ss:Type="Number">${num(agg.val/100000)}</Data></Cell>`,
+      rtna===null ? `<Cell><Data ss:Type="String">—</Data></Cell>` : `<Cell><Data ss:Type="Number">${num(rtna)}</Data></Cell>`,
+    ].join('');
+  };
+
+  let xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="hdr"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#142420" ss:Pattern="Solid"/></Style><Style ss:ID="num2"><NumberFormat ss:Format="0.00"/></Style></Styles>
+<Worksheet ss:Name="Inventory Value Summary"><Table>`;
+  xml += '<Row>' + headers.map(h=>`<Cell ss:StyleID="hdr"><Data ss:Type="String">${esc(h)}</Data></Cell>`).join('') + '</Row>';
+  flatRows.forEach(r=>{
+    let row = [r.branch, r.category, r.brand]
+      .map(v=>`<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`).join('');
+    sources.forEach(src=>{ row += metricCellsFor(r.bySource.get(src) || vsNewAgg()); });
+    row += metricCellsFor(vsGrandTotalAgg(r.bySource));
+    xml += '<Row>' + row + '</Row>';
+  });
+  xml += '</Table></Worksheet></Workbook>';
+  downloadBlob(xml, 'inventory_value_summary_export.xls', 'application/vnd.ms-excel');
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   MASTER RENDER
+   ════════════════════════════════════════════════════════════════════ */
+function safeRun(label, fn){
+  try{ fn(); }
+  catch(e){ console.error('[RENDER] '+label+' failed:', e); }
+}
+
+function renderAll(){
+  // Each section is isolated so one failure (e.g. a charting library not
+  // loading from its CDN) can't blank out the rest of the dashboard or
+  // leave the header stuck on "LOADING…".
+  safeRun('kpis', renderKpis);
+  safeRun('overview charts', renderOverviewCharts);
+  safeRun('heatmap', renderHeatmap);
+  safeRun('grid head', renderGridHead);
+  safeRun('grid', renderGrid);
+  safeRun('low stock', renderLowStock);
+  safeRun('management charts', renderManagementCharts);
+  safeRun('value summary', renderValueSummary);
+  safeRun('chips', renderChips);
+
+  const _asOnDateRow = _allRows.find(r => r && r.as_on_date);
+  $('#periodLabel').textContent = `STOCK AS ON ${fmtAsOnDate(_asOnDateRow && _asOnDateRow.as_on_date)}`;
+
+  if(typeof window.Chart === 'undefined'){
+    showErr('Charts library (Chart.js) failed to load from the CDN — KPIs, the grid, and tables above still work, but chart panels will stay blank. Check your network/firewall access to cdn.jsdelivr.net, then click the refresh button.');
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   EXPORTS
+   ════════════════════════════════════════════════════════════════════ */
+function currentExportRows(){ return sortedFiltered(); }
+
+function exportCsv(){
+  const rows = currentExportRows();
+  const headers = GRID_COLS.map(c=>c.label);
+  const lines = [headers.map(csvCell).join(',')];
+  rows.forEach(r=>{
+    lines.push(GRID_COLS.map(c=>csvCell(r[c.key])).join(','));
+  });
+  downloadBlob(lines.join('\r\n'), 'fg_stock_availability_export.csv', 'text/csv');
+}
+
+function exportExcelXml(){
+  // Lightweight SpreadsheetML export — opens natively in Excel, no library needed.
+  const rows = currentExportRows();
+  const headers = GRID_COLS.map(c=>c.label);
+  const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles><Style ss:ID="hdr"><Font ss:Bold="1"/><Interior ss:Color="#142420" ss:Pattern="Solid"/><Font ss:Color="#FFFFFF" ss:Bold="1"/></Style></Styles>
+<Worksheet ss:Name="FG Stock"><Table>`;
+  xml += '<Row>' + headers.map(h=>`<Cell ss:StyleID="hdr"><Data ss:Type="String">${esc(h)}</Data></Cell>`).join('') + '</Row>';
+  rows.forEach(r=>{
+    xml += '<Row>' + GRID_COLS.map(c=>{
+      const v = r[c.key];
+      const isNum = c.num && v!==null && v!==undefined && v!=='';
+      return `<Cell><Data ss:Type="${isNum?'Number':'String'}">${esc(isNum?Number(v):v)}</Data></Cell>`;
+    }).join('') + '</Row>';
+  });
+  xml += '</Table></Worksheet></Workbook>';
+  downloadBlob(xml, 'fg_stock_availability_export.xls', 'application/vnd.ms-excel');
+}
+
+function copyCurrentPage(){
+  const start=(_page-1)*_pageSize;
+  const rows = sortedFiltered().slice(start,start+_pageSize);
+  const headers = GRID_COLS.map(c=>c.label).join('\t');
+  const lines = rows.map(r=>GRID_COLS.map(c=>r[c.key]??'').join('\t'));
+  const text = [headers, ...lines].join('\n');
+  navigator.clipboard?.writeText(text).then(()=>{
+    const btn = $('#copyBtn'); const orig = btn.textContent;
+    btn.textContent = '✓ Copied'; setTimeout(()=>btn.textContent=orig, 1400);
+  }).catch(()=> alert('Copy failed — your browser may be blocking clipboard access.'));
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   TABS
+   ════════════════════════════════════════════════════════════════════ */
+function initTabs(){
+  $$('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      $$('.tab-btn').forEach(b=>b.classList.remove('active'));
+      $$('.tab-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+      // The Inventory Value Summary header measures its own row height to
+      // stack its two sticky header rows — that measurement is 0 while the
+      // tab panel is display:none, so redo it now that the panel is visible.
+      if(btn.dataset.tab==='valuesummary') renderValueSummaryHead(_vsPivot.sources);
+    });
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   WIRE UP CONTROLS
+   ════════════════════════════════════════════════════════════════════ */
+function initControls(){
+  FILTER_FIELDS.forEach(buildMultiSelect);
+
+  $('#quickSearch').addEventListener('input', debounce(applyFiltersAndRender, 180));
+  ['f_item_no_text','f_item_name_text','f_batch_num_text'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', debounce(applyFiltersAndRender,180));
+  });
+  ['f_qty_min','f_fa_min'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', debounce(applyFiltersAndRender,250));
+  });
+  $('#clearFiltersBtn').addEventListener('click', clearAllFilters);
+  $('#valueSummaryBody').addEventListener('click', onValueSummaryClick);
+  $('#vsExpandCategoryBtn').addEventListener('click', vsExpandCategoryLevel);
+  $('#vsExpandBrandBtn').addEventListener('click', vsExpandBrandLevel);
+  $('#vsCollapseCategoryBtn').addEventListener('click', vsCollapseCategoryLevel);
+  $('#vsCollapseBrandBtn').addEventListener('click', vsCollapseBrandLevel);
+  $('#vsExportBtn').addEventListener('click', exportValueSummaryExcel);
+
+  $('#gridQuickFind').addEventListener('input', debounce(()=>{
+    // Filters within the grid tab specifically, layered onto the global quick search field.
+    $('#quickSearch').value = $('#gridQuickFind').value;
+    applyFiltersAndRender();
+  },180));
+
+  $('#pageSizeSel').addEventListener('change', e=>{ _pageSize = parseInt(e.target.value,10); _page=1; renderGrid(); });
+  $('#pgFirst').addEventListener('click', ()=>{ _page=1; renderGrid(); });
+  $('#pgPrev').addEventListener('click', ()=>{ _page=Math.max(1,_page-1); renderGrid(); });
+  $('#pgNext').addEventListener('click', ()=>{ _page=_page+1; renderGrid(); });
+  $('#pgLast').addEventListener('click', ()=>{ _page=Math.ceil(sortedFiltered().length/_pageSize)||1; renderGrid(); });
+
+  $('#exportCsvBtn').addEventListener('click', exportCsv);
+  $('#exportXlsBtn').addEventListener('click', exportExcelXml);
+  $('#copyBtn').addEventListener('click', copyCurrentPage);
+
+  $('#refreshBtn').addEventListener('click', async ()=>{
+    const btn = $('#refreshBtn'); btn.classList.add('spin');
+    try{
+      await loadAllData();
+      applyFiltersAndRender();
+    }catch(e){
+      console.error('[REFRESH] failed:', e);
+      showErr('Refresh failed: '+(e.message||e));
+    }finally{
+      btn.classList.remove('spin');
+    }
+  });
+
+  // Sidebar "Refresh from Cloud" — same action as the header's 🔄 icon, but
+  // explicitly labeled. Mainly useful after a GitHub-fast-path boot, since
+  // that no longer auto-reconciles with Supabase in the background — this
+  // button is the on-demand way to pull the latest live data when you want it.
+  $('#refreshFromCloudBtn').addEventListener('click', async ()=>{
+    const btn = $('#refreshFromCloudBtn'), status = $('#refreshFromCloudStatus');
+    btn.disabled = true; btn.style.opacity = '.6';
+    if(status) status.textContent = 'Fetching latest from Supabase…';
+    try{
+      await loadAllData();
+      applyFiltersAndRender();
+      if(status) status.textContent = 'Refreshed '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+    }catch(e){
+      console.error('[REFRESH FROM CLOUD] failed:', e);
+      showErr('Refresh failed: '+(e.message||e));
+      if(status) status.textContent = 'Refresh failed — see banner above';
+    }finally{
+      btn.disabled = false; btn.style.opacity = '1';
+    }
+  });
+
+  const heatmapMetricSel = document.getElementById('heatmapMetric');
+  if(heatmapMetricSel){
+    heatmapMetricSel.value = _heatmapMetric;
+    heatmapMetricSel.addEventListener('change', ()=>{
+      _heatmapMetric = heatmapMetricSel.value;
+      safeRun('heatmap', renderHeatmap);
+    });
+  }
+
+  initTabs();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   BOOTSTRAP
+   ════════════════════════════════════════════════════════════════════ */
+(async function init(){
+  try{
+    setLoading('AUTHENTICATING…');
+    const authOk = await bootstrapAuth();
+    if(!authOk){
+      setLoading('', false);
+      showErr('Could not load your user profile, so access is blocked (same safeguard the Sales/Purchase dashboards use). '
+        +'This almost always means the account has no row in DUROPLY.user_profiles, or an RLS policy is preventing it from being read. '
+        +'Please contact an administrator. (Check the browser console for the exact reason, prefixed "[AUTH]".)');
+      return;
+    }
+    renderUserBadge();
+
+    // GitHub-first boot: if a snapshot is configured and reachable, paint
+    // from it immediately (fast, no waiting on Supabase every load). Data
+    // stays exactly as of that snapshot until you click "Refresh from Cloud"
+    // (sidebar) to pull the latest from Supabase on demand. Any failure here
+    // silently falls back to the original Supabase-only boot path below.
+    let usedFastPath = false;
+    try{
+      if(typeof window.ghTryAutoLoadOnBoot === 'function'){
+        setLoading('CHECKING GITHUB SNAPSHOT…');
+        usedFastPath = await window.ghTryAutoLoadOnBoot();
+      }
+    }catch(e){ console.warn('[INIT] GitHub fast-path threw, falling back to Supabase:', e); }
+
+    let ok = usedFastPath;
+    if(!usedFastPath){
+      ok = await loadAllData();
+    }
+    initControls();
+    if(ok){ applyFiltersAndRender(); }
+    else { safeRun('kpis (fallback)', renderKpis); }
+    if(usedFastPath) setLoading('', false);
+  }catch(e){
+    console.error('[INIT] bootstrap failed:', e);
+    showErr('Dashboard failed to start: '+(e.message||e));
+    setLoading('', false);
+  }
+})();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     GITHUB SYNC MODULE
+     Publishes the currently loaded stock rows (_allRows) as a single JSON
+     file to a GitHub repo via the Contents API, or pulls that file back down
+     and repaints the dashboard from it — the same "flat file in GitHub as a
+     shared snapshot" pattern used by the other Duroply dashboards. Self-
+     contained: reads/writes _allRows and calls applyFiltersAndRender(),
+     which already exist in the main script above.
+     ════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+
+  const GH_CFG_KEY = 'stockGhSyncConfig';
+  // NOTE: the Personal Access Token is stored in this browser's localStorage
+  // alongside the repo coordinates, the same trusted-internal-tool pattern
+  // already used elsewhere in this dashboard suite (e.g. the Supabase anon
+  // key is embedded in plaintext client-side). Anyone using this browser
+  // profile could read it via devtools — treat this like any other shared
+  // internal admin tool, not a public-facing app.
+
+  function ghLog(msg, kind){
+    const el = document.getElementById('ghSyncLog');
+    if(!el) return;
+    const t = new Date().toTimeString().slice(0,8);
+    const color = kind==='ok' ? '#8FBF8A' : kind==='err' ? '#D98F86' : kind==='warn' ? '#E3C06B' : '#CFE0D6';
+    const line = document.createElement('div');
+    line.innerHTML = '<span style="color:rgba(243,241,234,.45)">'+t+'</span> <span style="color:'+color+'">'+msg+'</span>';
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function ghReadFields(){
+    return {
+      owner:  (document.getElementById('ghOwner').value||'').trim(),
+      repo:   (document.getElementById('ghRepo').value||'').trim(),
+      branch: (document.getElementById('ghBranch').value||'').trim() || 'main',
+      path:   (document.getElementById('ghPath').value||'').trim() || 'fg_closing_stock_snapshot.json',
+      token:  (document.getElementById('ghToken').value||'').trim()
+    };
+  }
+
+  function ghLoadConfig(){
+    let cfg = null;
+    try{ cfg = JSON.parse(localStorage.getItem(GH_CFG_KEY) || 'null'); }catch(_e){}
+    if(cfg){
+      document.getElementById('ghOwner').value  = cfg.owner  || '';
+      document.getElementById('ghRepo').value   = cfg.repo   || '';
+      document.getElementById('ghBranch').value = cfg.branch || 'main';
+      document.getElementById('ghPath').value   = cfg.path   || 'fg_closing_stock_snapshot.json';
+      document.getElementById('ghToken').value  = cfg.token  || '';
+    }
+    ghUpdateMiniStatus(cfg);
+  }
+
+  function ghSaveConfig(silent){
+    const cfg = ghReadFields();
+    if(!cfg.owner || !cfg.repo){
+      if(!silent) ghLog('⚠ Repo Owner and Repo Name are required before saving.', 'warn');
+      return null;
+    }
+    try{ localStorage.setItem(GH_CFG_KEY, JSON.stringify(cfg)); }catch(e){
+      ghLog('⚠ Could not save config to this browser: '+(e && e.message ? e.message : e), 'warn');
+    }
+    if(!silent) ghLog('✓ Config saved to this browser.', 'ok');
+    ghUpdateMiniStatus(cfg);
+    return cfg;
+  }
+
+  function ghUpdateMiniStatus(cfg){
+    const mini = document.getElementById('ghSyncStatusMini');
+    if(!mini) return;
+    if(!cfg || !cfg.owner || !cfg.repo){
+      mini.textContent = 'Not configured';
+      return;
+    }
+    let lastSync = '';
+    try{ lastSync = localStorage.getItem('stockGhSyncLast') || ''; }catch(_e){}
+    mini.textContent = cfg.owner+'/'+cfg.repo + (lastSync ? (' · last sync '+lastSync) : ' · not synced yet');
+  }
+
+  function ghRememberSyncTime(){
+    const stamp = new Date().toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});
+    try{ localStorage.setItem('stockGhSyncLast', stamp); }catch(_e){}
+    ghUpdateMiniStatus(ghReadFields());
+  }
+
+  // ─── Base64 helpers (UTF-8 safe) ───────────────────────────────────────
+  function utf8ToB64(str){
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  function b64ToUtf8(b64){
+    return decodeURIComponent(escape(atob(b64.replace(/\n/g,''))));
+  }
+
+  // ─── Save current data as a JSON snapshot to GitHub ────────────────────
+  /* ────────────────────────────────────────────────────────────────────
+     Uses the Git Data API (blob → tree → commit → ref update) instead of
+     a single Contents-API PUT. The Contents API only reliably returns/
+     accepts a file `sha` for files up to 1 MB; this snapshot is several
+     MB (10,000+ rows), so the old GET-sha-then-PUT flow could get a 200
+     "file found" response whose `sha` wasn't actually usable, and GitHub
+     would then reject the PUT with 422 "sha" wasn't supplied — it looked
+     like a fresh create against a path that already has a file. Building
+     the commit by hand below sidesteps that Contents-API size threshold
+     entirely (metadata calls, not file-content calls) and supports files
+     up to 100 MB.
+     ──────────────────────────────────────────────────────────────────── */
+  window.ghPush = async function(){
+    const cfg = ghSaveConfig(true);
+    if(!cfg) { ghLog('⚠ Enter Repo Owner and Repo Name first.', 'err'); return; }
+    if(!cfg.token){ ghLog('⚠ A Personal Access Token (with repo contents write access) is required to push.', 'err'); return; }
+    if(!Array.isArray(window._allRows) || !window._allRows.length){
+      ghLog('⚠ No data currently loaded in the dashboard — nothing to push.', 'err');
+      return;
+    }
+    const btn = document.getElementById('ghPushBtn');
+    if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+
+    const apiRoot = 'https://api.github.com/repos/'+cfg.owner+'/'+cfg.repo;
+    const authHeaders = { 'Authorization':'Bearer '+cfg.token, 'Accept':'application/vnd.github+json' };
+    async function ghApi(path, opts){
+      const res = await fetch(apiRoot+path, Object.assign({}, opts, {
+        headers: Object.assign({}, authHeaders, (opts && opts.headers) || {})
+      }));
+      if(!res.ok){
+        const errBody = await res.text().catch(()=> '');
+        throw new Error(((opts && opts.method) || 'GET')+' '+path+' failed ('+res.status+'): '+errBody.slice(0,300));
+      }
+      return res.json();
+    }
+
+    try{
+      ghLog('Reading current branch head ('+cfg.branch+') …', 'info');
+      let refJson;
+      try{
+        refJson = await ghApi('/git/ref/heads/'+encodeURIComponent(cfg.branch));
+      }catch(e){
+        throw new Error('Could not read branch "'+cfg.branch+'" ('+(e && e.message ? e.message : e)+'). If this is a brand-new empty repo, GitHub has no commits/branches yet — add an initial file (e.g. a README) via the GitHub website first, then try again.');
+      }
+      const parentCommitSha = refJson.object.sha;
+
+      ghLog('Reading base tree …', 'info');
+      const commitJson = await ghApi('/git/commits/'+parentCommitSha);
+      const baseTreeSha = commitJson.tree.sha;
+
+      const payload = {
+        generated_at: new Date().toISOString(),
+        row_count: window._allRows.length,
+        rows: window._allRows
+      };
+      const contentB64 = utf8ToB64(JSON.stringify(payload));
+      const sizeKB = (contentB64.length*0.75/1024).toFixed(1);
+      ghLog('Uploading snapshot blob ('+window._allRows.length.toLocaleString('en-IN')+' rows · ~'+sizeKB+' KB) …', 'info');
+      const blobJson = await ghApi('/git/blobs', {
+        method:'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ content: contentB64, encoding: 'base64' })
+      });
+
+      ghLog('Building new tree …', 'info');
+      const treeJson = await ghApi('/git/trees', {
+        method:'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          base_tree: baseTreeSha,
+          tree: [{ path: cfg.path, mode: '100644', type: 'blob', sha: blobJson.sha }]
+        })
+      });
+
+      ghLog('Creating commit …', 'info');
+      const newCommitJson = await ghApi('/git/commits', {
+        method:'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          message: 'Stock dashboard snapshot — '+window._allRows.length+' rows ('+new Date().toISOString()+')',
+          tree: treeJson.sha,
+          parents: [parentCommitSha]
+        })
+      });
+
+      ghLog('Updating branch '+cfg.branch+' to point at the new commit …', 'info');
+      await ghApi('/git/refs/heads/'+encodeURIComponent(cfg.branch), {
+        method:'PATCH',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ sha: newCommitJson.sha })
+      });
+
+      ghLog('✓✓ Snapshot pushed to '+cfg.owner+'/'+cfg.repo+'@'+cfg.branch+'/'+cfg.path, 'ok');
+      ghLog('🎉 Done · anyone opening this dashboard next will automatically load this snapshot first (fast path on boot), then refresh from Supabase in the background.', 'ok');
+      ghRememberSyncTime();
+    }catch(err){
+      ghLog('✗ Push failed: '+(err && err.message ? err.message : err), 'err');
+    }finally{
+      if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+    }
+  };
+
+  // ─── Load the latest snapshot from GitHub into the dashboard ──────────
+  /* ────────────────────────────────────────────────────────────────────
+     Fetch + parse the snapshot file's rows, given a saved config.
+
+     Two separate large-file problems, fixed in order:
+     1) GitHub's Contents API only inlines file content (base64, in the
+        `content` field) for files up to 1 MB — our snapshot is several MB
+        (10,000+ rows), so `content` comes back empty and JSON.parse('')
+        threw "Unexpected end of JSON input".
+     2) The natural-looking fallback — fetching the response's
+        `download_url` (raw.githubusercontent.com) — works for size, but
+        breaks with a bare "TypeError: Failed to fetch" whenever a token
+        is attached: adding an Authorization header to a cross-origin
+        request forces the browser to CORS-preflight it first, and
+        raw.githubusercontent.com doesn't handle that preflight — so the
+        browser blocks the request before it ever reaches GitHub.
+
+     Fix: ask api.github.com itself for the RAW bytes, via
+     `Accept: application/vnd.github.raw`, on the exact same endpoint we
+     already use for metadata/push. That endpoint fully supports
+     Authorization over CORS (we already rely on this for push), handles
+     files of any size, and works for both public and private repos.
+     download_url is kept only as a last-resort fallback for edge cases,
+     and deliberately sent WITHOUT a token (since that combination is what
+     breaks) — so it only helps for public repos.
+
+     Throws on failure; caller decides how to handle/report it.
+     ──────────────────────────────────────────────────────────────────── */
+  async function ghFetchSnapshotRows(cfg){
+    const branch = cfg.branch || 'main';
+    const apiBase = 'https://api.github.com/repos/'+cfg.owner+'/'+cfg.repo+'/contents/'+cfg.path;
+    const authHeader = cfg.token ? { 'Authorization':'Bearer '+cfg.token } : {};
+
+    // Primary path: ask the GitHub API for raw bytes directly.
+    try{
+      const rawRes = await fetch(apiBase+'?ref='+encodeURIComponent(branch), {
+        headers: Object.assign({ 'Accept':'application/vnd.github.raw' }, authHeader)
+      });
+      if(rawRes.ok){
+        const text = await rawRes.text();
+        const payload = JSON.parse(text);
+        const rows = Array.isArray(payload) ? payload : payload.rows;
+        if(Array.isArray(rows) && rows.length){
+          return { rows, generated_at: payload && payload.generated_at };
+        }
+      }
+    }catch(e){
+      console.warn('[GitHub Sync] raw-media-type fetch failed, trying fallback:', e);
+    }
+
+    // Fallback path: classic JSON response (base64 `content`, ≤1MB), or
+    // download_url for bigger files — public repos only (see note above).
+    const res = await fetch(apiBase+'?ref='+encodeURIComponent(branch), {
+      headers: Object.assign({ 'Accept':'application/vnd.github+json' }, authHeader)
+    });
+    if(!res.ok){
+      const errBody = await res.text().catch(()=> '');
+      throw new Error('GET failed ('+res.status+'): '+errBody.slice(0,200));
+    }
+    const meta = await res.json();
+    let payload;
+    if(meta.content){
+      payload = JSON.parse(b64ToUtf8(meta.content));
+    }else if(meta.download_url){
+      const rawRes = await fetch(meta.download_url); // no auth header — see note above
+      if(!rawRes.ok) throw new Error('Raw file fetch failed ('+rawRes.status+') — if this is a private repo, the raw-media-type request above should have succeeded instead; check the token.');
+      payload = await rawRes.json();
+    }else{
+      throw new Error('GitHub response had neither inline content nor a download_url — cannot read this file.');
+    }
+    const rows = Array.isArray(payload) ? payload : payload.rows;
+    if(!Array.isArray(rows) || !rows.length){
+      throw new Error('Snapshot file was found but contained no rows.');
+    }
+    return { rows, generated_at: payload && payload.generated_at };
+  }
+
+  window.ghPull = async function(){
+    const cfg = ghSaveConfig(true);
+    if(!cfg){ ghLog('⚠ Enter Repo Owner and Repo Name first.', 'err'); return; }
+    const btn = document.getElementById('ghPullBtn');
+    if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+    try{
+      ghLog('Fetching snapshot from '+cfg.owner+'/'+cfg.repo+'@'+cfg.branch+'/'+cfg.path+' …', 'info');
+      const { rows, generated_at } = await ghFetchSnapshotRows(cfg);
+      window._allRows = normalizeBrandTerms(rows);
+      ghLog('✓✓ Loaded '+rows.length.toLocaleString('en-IN')+' rows from GitHub'
+        +(generated_at ? (' · snapshot generated '+new Date(generated_at).toLocaleString('en-IN')) : '')+'.', 'ok');
+      ghRememberSyncTime();
+    }catch(err){
+      ghLog('✗ Load failed: '+(err && err.message ? err.message : err), 'err');
+    }finally{
+      if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+    }
+  };
+
+  /* ────────────────────────────────────────────────────────────────────
+     BOOT FAST-PATH — called once from the main init() sequence, before
+     the (slower) Supabase fetch. If a GitHub snapshot is configured and
+     reachable, the dashboard paints from it immediately. Silent by
+     design (no error alerts) — any failure here just falls back to the
+     normal Supabase-only boot path exactly as before. Returns true only
+     if rows were actually loaded from GitHub.
+     ──────────────────────────────────────────────────────────────────── */
+  window.ghTryAutoLoadOnBoot = async function(){
+    let cfg = null;
+    try{ cfg = JSON.parse(localStorage.getItem(GH_CFG_KEY) || 'null'); }catch(_e){}
+    if(!cfg || !cfg.owner || !cfg.repo) return false;
+    try{
+      const { rows, generated_at } = await ghFetchSnapshotRows(cfg);
+      window._allRows = normalizeBrandTerms(rows);
+      ghLog('✓ Boot fast-path: loaded '+rows.length.toLocaleString('en-IN')+' rows from GitHub snapshot'
+        +(generated_at ? (' · generated '+new Date(generated_at).toLocaleString('en-IN')) : '')+'.', 'ok');
+      ghRememberSyncTime();
+      return true;
+    }catch(e){
+      console.warn('[GitHub Sync] boot fast-path failed, falling back to Supabase:', e);
+      return false;
+    }
+  };
+
+  function ghOpenModal(){
+    ghLoadConfig();
+    document.getElementById('ghSyncModalOverlay').style.display = 'flex';
+  }
+  function ghCloseModal(){
+    document.getElementById('ghSyncModalOverlay').style.display = 'none';
+  }
+
+  function wireGhSync(){
+    const openBtn = document.getElementById('ghSyncOpenBtn');
+    if(openBtn) openBtn.addEventListener('click', ghOpenModal);
+    const closeBtn = document.getElementById('ghSyncCloseBtn');
+    if(closeBtn) closeBtn.addEventListener('click', ghCloseModal);
+    const overlay = document.getElementById('ghSyncModalOverlay');
+    if(overlay) overlay.addEventListener('click', (e)=>{ if(e.target===overlay) ghCloseModal(); });
+    const saveBtn = document.getElementById('ghSaveConfigBtn');
+    if(saveBtn) saveBtn.addEventListener('click', ()=>ghSaveConfig(false));
+    const pushBtn = document.getElementById('ghPushBtn');
+    if(pushBtn) pushBtn.addEventListener('click', ()=>window.ghPush());
+    const pullBtn = document.getElementById('ghPullBtn');
+    if(pullBtn) pullBtn.addEventListener('click', ()=>window.ghPull());
+    // Reflect saved config in the sidebar mini-status on first paint, without opening the modal.
+    let cfg = null;
+    try{ cfg = JSON.parse(localStorage.getItem(GH_CFG_KEY) || 'null'); }catch(_e){}
+    ghUpdateMiniStatus(cfg);
+  }
+
+  // Wire immediately — by the time this script executes, the button/modal
+  // markup above it in this same document has already been parsed into the
+  // DOM, so there's no need to wait for DOMContentLoaded. This matters
+  // specifically because this dashboard is opened via document.write()
+  // into a popup window (from the app-launcher), where DOMContentLoaded
+  // does not reliably fire — waiting on it left this button permanently
+  // unwired (dead click, no error) rather than just slow to become active.
+  wireGhSync();
+})();
+</script>
+</body>
+</html>
