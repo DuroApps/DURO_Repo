@@ -1,20 +1,35 @@
 {
   "schema": "duroply.manifest.v1",
   "latest": "data/snapshot.json.gz",
-  "latestArchive": "data/history/2026-11-22T04-03-36Z.json.gz",
-  "generatedAt": "2026-11-22T04:03:36.441Z",
+  "latestArchive": "data/history/2026-11-23T04-02-51Z.json.gz",
+  "generatedAt": "2026-11-23T04:02:51.339Z",
   "generatedBy": "admin",
   "rowCounts": {
-    "sales": 49941,
-    "collections": 6728,
+    "sales": 49970,
+    "collections": 6752,
     "opening_balance": 887,
     "tod_master": 26,
     "customer_master": 1948
   },
-  "sizeBytes": 5670329,
-  "rawBytes": 108230309,
+  "sizeBytes": 5672782,
+  "rawBytes": 108297483,
   "compressed": true,
   "history": [
+    {
+      "path": "data/history/2026-11-23T04-02-51Z.json.gz",
+      "generatedAt": "2026-11-23T04:02:51.339Z",
+      "generatedBy": "admin",
+      "rowCounts": {
+        "sales": 49970,
+        "collections": 6752,
+        "opening_balance": 887,
+        "tod_master": 26,
+        "customer_master": 1948
+      },
+      "sizeBytes": 5672782,
+      "rawBytes": 108297483,
+      "compressed": true
+    },
     {
       "path": "data/history/2026-11-22T04-03-36Z.json.gz",
       "generatedAt": "2026-11-22T04:03:36.441Z",
@@ -898,21 +913,6 @@
       },
       "sizeBytes": 5245291,
       "rawBytes": 93171499,
-      "compressed": true
-    },
-    {
-      "path": "data/history/2026-10-13T05-59-46Z.json.gz",
-      "generatedAt": "2026-10-13T05:59:46.162Z",
-      "generatedBy": "admin",
-      "rowCounts": {
-        "sales": 42717,
-        "collections": 5693,
-        "opening_balance": 887,
-        "tod_master": 26,
-        "customer_master": 1909
-      },
-      "sizeBytes": 4852250,
-      "rawBytes": 94890736,
       "compressed": true
     }
   ]
